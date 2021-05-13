@@ -30,7 +30,7 @@
                     <input class="server" type="text" name="sip_domain" size="30" placeholder="SIP domain name"
                         autocomplete="server domain" title="SIP domain name" required>
                     <input class="server" type="text" name="sip_addresses" size="30" placeholder="SIP server addresses"
-                        autocomplete="server address" title="SIP server addresses" required>
+                        autocomplete="server address" title="SIP server addresses e.g.: [&quot;wss://example.com&quot;]" required>
                 </fieldset>
 
                 <fieldset>
@@ -52,7 +52,7 @@
 
 
         <div id="subscribe_panel" class="panel">
-            <button id="subscribe_return_btn" title="returns to dialer">Dialer</button>
+            <button id="subscribe_return_btn" title="returns to main panel">main panel</button>
             <fieldset>
                 <legend>subscribe</legend>
                 <form id="send_subscribe_form" onsubmit="event.preventDefault()">
