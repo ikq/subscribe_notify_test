@@ -265,8 +265,8 @@ function guiSendInitSubscribe() {
     /* credential is optional.
      allows use authentication different from REGISTER/INVITE
     let credential = {
-        authorization_user: phone.account.authUser ? phone.account.authUser : phone.account.user,
-        password: phone.account.password
+        authorization_user: 'user name',
+        password: 'some password'
     };
     */
     let credential = null;
