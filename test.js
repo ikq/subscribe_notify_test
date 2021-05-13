@@ -1,4 +1,3 @@
-
 /*
   SUBSCRIBE test
  */
@@ -11,8 +10,8 @@ let serverSubscribeDialog = null;
 
 // Run when document is ready
 function main() {
-    server = guiLoadServerConfig();
-    account = guiLoadAccount();
+    server = guiLoadServerConfig({domain:'', addresses:''});
+    account = guiLoadAccount({user:'', password:'', displayName:'', authUser:''});
     guiInit();
     guiShowPanel('main_panel');
 }
@@ -87,7 +86,7 @@ function guiInit() {
             addresses: JSON.parse(addresses),
         };
         guiStoreServerConfig(conf);
-        stackInit();
+        location.reload();
     }
 
     document.getElementById('subscribe_btn').onclick = guiSubscribe;
@@ -139,6 +138,7 @@ function stackInit() {
 
     jssipUA.on('disconnected', () => {
         guiInfo('disconnected');
+        guiShowPanel('main_panel');
     });
 
     jssipUA.on('registered', (e) => {
@@ -152,19 +152,30 @@ function stackInit() {
     jssipUA.on('registrationFailed', (e) => {
         guiError('regisration failed');
     });
+
+    jssipUA.on('newSubscribe', (e) => {
+        let subs = e.request;
+        let ev = subs.parseHeader('event');
+        let accepts = subs.getHeaders('accept');
+        console.log('incomingSubscribe', subs, ev.event, accepts);
+        let code = incomingSubscribe(subs, ev.event, accepts);
+        if (code > 0)
+            subs.reply(code);
+    });
+
     jssipUA.start();
 }
 
 
 
 //----------------- Local storage load/store ----------------------
-function guiLoadAccount() { return storageLoadConfig('phoneAccount'); }
-function guiStoreAccount(value) { storageSaveConfig('phoneAccount', value); }
-function guiLoadServerConfig() { return storageLoadConfig('phoneServerConfig'); }
-function guiStoreServerConfig(value) { storageSaveConfig('phoneServerConfig', value); }
-function storageLoadConfig(name) {
+function guiLoadAccount(def) { return storageLoadConfig('testAccount', def); }
+function guiStoreAccount(value) { storageSaveConfig('testAccount', value); }
+function guiLoadServerConfig(def) { return storageLoadConfig('testServerConfig', def); }
+function guiStoreServerConfig(value) { storageSaveConfig('testServerConfig', value); }
+function storageLoadConfig(name, def = {}) {
     let str_value = localStorage.getItem(name);
-    return str_value ? JSON.parse(str_value) : {}
+    return str_value ? JSON.parse(str_value) : def;
 }
 function storageSaveConfig(name, value) {
     localStorage.setItem(name, JSON.stringify(value));
