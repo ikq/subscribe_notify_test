@@ -91,7 +91,7 @@ function guiInit() {
     }
 
     document.getElementById('subscribe_btn').onclick = guiSubscribe;
-    document.getElementById('subscribe_return_btn').onclick = function () { guiInfo(''); guiShowPanel('dialer_panel'); }
+    document.getElementById('subscribe_return_btn').onclick = function () { guiInfo(''); guiShowPanel('main_panel'); }
     document.getElementById('send_init_subscribe_btn').onclick = guiSendInitSubscribe;
     document.getElementById('send_next_subscribe_btn').onclick = guiSendNextSubscribe;
     document.getElementById('send_unsubscribe_btn').onclick = guiSendUnsubscribe;
