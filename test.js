@@ -162,6 +162,8 @@ function stackInit() {
         if (code > 0)
             subs.reply(code);
     });
+  
+    JsSIP.debug.enable('JsSIP:*');
 
     jssipUA.start();
 }
