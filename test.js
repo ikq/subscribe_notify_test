@@ -1,3 +1,4 @@
+
 /*
   SUBSCRIBE test
  */
@@ -10,8 +11,8 @@ let serverSubscribeDialog = null;
 
 // Run when document is ready
 function main() {
-    server = guiLoadServerConfig({domain:'', addresses:''});
-    account = guiLoadAccount({user:'', password:'', displayName:'', authUser:''});
+    server = guiLoadServerConfig({ domain: '', addresses: '' });
+    account = guiLoadAccount({ user: '', password: '', displayName: '', authUser: '' });
     guiInit();
     guiShowPanel('main_panel');
 }
@@ -98,7 +99,13 @@ function guiInit() {
     document.getElementById('send_terminate_notify_btn').onclick = guiSendTerminateNotify;
 
     if (server.domain && server.addresses && account.user && account.password) {
-        stackInit();
+        try {
+            stackInit();
+        } catch (e) {
+            guiError(e);
+            guiShowPanel('setting_panel');
+            return;
+        }
     } else {
         guiInfo('Please fill server & account');
         guiShowPanel('setting_panel');
@@ -162,9 +169,8 @@ function stackInit() {
         if (code > 0)
             subs.reply(code);
     });
-  
-    JsSIP.debug.enable('JsSIP:*');
 
+    JsSIP.debug.enable('JsSIP:*');
     jssipUA.start();
 }
 
@@ -241,7 +247,7 @@ function guiSendInitSubscribe() {
     }
 
     let domain = server.domain;
-    let target =  sendToUser + '@' + domain;
+    let target = sendToUser + '@' + domain;
     let callee = sendToUser;
     let calleeDN = null;
     let caller = account.user;
