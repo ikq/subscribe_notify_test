@@ -1,0 +1,15 @@
+        #panels {
+            max-width: 500px;
+        }
+
+        .panel {
+            display: none;
+        }
+
+        #setting .server {
+            background: lightgray;
+        }
+
+        #setting .account {
+            background: #A5ECEC;
+        }

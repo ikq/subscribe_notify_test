@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Subscribe/Notify test</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="test.css">
+    <link rel="icon" href="favicon.png">
+</head>
+
+<body onload="main()">
+    <script defer src="jssip.js"></script>
+    <script defer src="utils.js"></script>
+    <script defer src="test.js"></script>
+
+    <div id="status_line">
+    </div>
+
+    <!-- All panels are hidden, except one  -->
+    <div id="panels">
+        <div id="main_panel" class="panel">
+            <button id="setting_btn">Settings</button>
+            <button id="subscribe_btn">Subscribe</button>
+        </div>
+        <div id="setting_panel" class="panel">
+            <form id="setting" onsubmit="event.preventDefault()">
+                <fieldset>
+                    <legend>Server</legend>
+                    <input class="server" type="text" name="sip_domain" size="30" placeholder="SIP domain name"
+                        autocomplete="server domain" title="SIP domain name" required>
+                    <input class="server" type="text" name="sip_addresses" size="30" placeholder="SIP server addresses"
+                        autocomplete="server address" title="SIP server addresses" required>
+                </fieldset>
+
+                <fieldset>
+                    <legend>Account</legend>
+                    <input class="account" type="text" name="user" size="30" placeholder="user name" title="User name"
+                        autocomplete="account name" required>
+                    <input class="account" type="text" name="display_name" size="30" placeholder="display name"
+                        title="Optional display name" autocomplete="account display-name">
+                    <input class="account" type="password" name="password" size="30" placeholder="password"
+                        title="User password" autocomplete="account password" required>
+                    <input class="account" type="text" name="auth_user" size="30"
+                        placeholder="optional authorization name" title="Optional authorization name"
+                        autocomplete="account auth-name">
+                </fieldset>
+
+            </form>
+            <button id="login_btn" title="Login">Login</button>
+        </div>
+
+
+        <div id="subscribe_panel" class="panel">
+            <button id="subscribe_return_btn" title="returns to dialer">Dialer</button>
+            <fieldset>
+                <legend>subscribe</legend>
+                <form id="send_subscribe_form" onsubmit="event.preventDefault()">
+                    to user:<input type="text" class="input" name="user" size="6">
+                    event:<input type="text" class="input" name="event_name" size="6" value="test">
+                    expires:<input type="text" class="input" name="expires" size="4" class="mark_invalid" pattern="^\d+$" value="3600"><br>
+                    <button id="send_init_subscribe_btn" title="Send initial SUBSCRIBE">subscribe</button><br>
+                    <button id="send_next_subscribe_btn" title="Send next SUBSCRIBE">next subscribe</button><br>
+                    <button id="send_unsubscribe_btn" title="Send un-SUBSCRIBE">un-subscribe</button>
+                </form>
+            </fieldset>
+            <fieldset>
+                <legend>notify</legend>
+                <form id="send_notify_form" onsubmit="event.preventDefault()">
+                    <button id="send_notify_btn" title="send NOTIFY">notify</button><br>
+                    <button id="send_terminate_notify_btn" title="Send terminate NOTIFY">end notify</button>
+                </form>
+            </fieldset>
+        </div>
+    </div>
+</body>
+
+</html>
