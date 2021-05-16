@@ -265,8 +265,8 @@ function guiSendInitSubscribe() {
     /* credential is optional.
      allows use authentication different from REGISTER/INVITE
     let credential = {
-        authorization_user: 'user name',
-        password: 'some password'
+        authorization_user: phone.account.authUser ? phone.account.authUser : phone.account.user,
+        password: phone.account.password
     };
     */
     let credential = null;
@@ -332,9 +332,15 @@ function createServerSubscribeDialog(subscribe) {
             guiInfo('server dialog: active');
             guiSubscribeButtons();
         },
-        subscribe(dlg, subscribe, body, contentType) { // with not empty body
+        subscribe(dlg, subscribe, body, contentType) { 
             console.log('receive SUBSCRIBE', subscribe, body, contentType);
             guiInfo('receive SUBSCRIBE');
+            let expires = parseInt(subscribe.getHeader('expires'));
+            if( expires === 0 ){
+              dlg.sendTerminateNotify('Terminate notify with current system state');
+            } else {
+              dlg.sendNotify('Notify current system state');
+            }
         },
         terminated(dlg, reason) {
             guiWarning(`server dialog: terminated (${reason})`);
