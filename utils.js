@@ -278,9 +278,9 @@ class ServerSubscribeDialog {
         this.jssipUA.sendRequest('NOTIFY', this.target, this.params, headers, body, this, this.credential);
     }
 
-    sendTerminateNotify() {
+    sendTerminateNotify(body = null) {
         this._dialogTerminated('send terminate notify');
-        this.sendNotify();
+        this.sendNotify(body);
     }
     // NOTIFY callbacks
     onAuthenticated() {
@@ -317,11 +317,10 @@ class ServerSubscribeDialog {
         request.reply(200, null, ['Expires: ' + this.expires, 'Contact: ' + this.contact]);
 
         let body = request.body;
-        if (body) {
-            let ct = request.getHeader('content-type');
-            this.log('SSubs>>> subscribe: id=' + this.id, body, ct);
-            this.listeners.subscribe(this, request, body, ct);
-        }
+        let ct = request.getHeader('content-type');
+        this.log('SSubs>>> subscribe: id=' + this.id, body, ct);
+        // Upon receive SUBSCRIBE server send NOTIFY
+        this.listeners.subscribe(this, request, body, ct);
 
         if (this.expires === 0) {
             this._dialogTerminated('receive un-subscribe');
