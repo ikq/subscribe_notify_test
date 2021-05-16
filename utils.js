@@ -4,10 +4,11 @@
  * Client SUBSCRIBE dialog
  */
 class ClientSubscribeDialog {
-    constructor({ jssipUA, target, eventName, accept, expires, contentType, allowEvents, params, headers, listeners, credential }) {
-        if( !jssipUA )
-            throw 'missed reference to JsSIP instance';
+    constructor({ jssipUA, log, target, eventName, accept, expires, contentType, allowEvents, params, headers, listeners, credential }) {
+        if (!jssipUA)
+            throw 'missed reference to JsSIP UA instance';
         this.jssipUA = jssipUA;
+        this.log = log ? log : console.log;
         if (!target)
             throw 'missed target';
         this.target = target;
@@ -22,19 +23,19 @@ class ClientSubscribeDialog {
         this.expires = expires;
         this.allowEvents = allowEvents; // optional
         this.contentType = contentType; // optional
-        if( !params)
-           throw 'missed params';
-        if (!params.from_uri) 
-           throw 'missed params.from_uri';
-        if (!params.to_uri) 
-           throw 'missed params.to_uri';
+        if (!params)
+            throw 'missed params';
+        if (!params.from_uri)
+            throw 'missed params.from_uri';
+        if (!params.to_uri)
+            throw 'missed params.to_uri';
         this.params = params;
         params.from_tag = JsSIP.Utils.newTag();
         params.to_tag = null;
         params.call_id = JsSIP.Utils.createRandomToken(20);
         params.cseq = Math.floor(Math.random() * 10000 + 1);
-        //this.contact = '<sip:' + params.from_uri.user + '@' + JsSIP.Utils.createRandomToken(12) + '.invalid;transport=ws>';
-        this.contact = '<sip:' + params.from_uri.user + '@' + params.from_uri.host + ';transport=ws>';
+        this.contact = '<sip:' + params.from_uri.user + '@' + JsSIP.Utils.createRandomToken(12) + '.invalid;transport=ws>';
+        //this.contact = '<sip:' + params.from_uri.user + '@' + params.from_uri.host + ';transport=ws>';
         if (!listeners)
             throw 'missed listeners';
         if (!listeners.active)
@@ -79,7 +80,7 @@ class ClientSubscribeDialog {
             if (this.params.to_tag === null) {
                 this.params.to_tag = response.to_tag;
                 this.id = this.params.call_id + this.params.from_tag + this.params.to_tag;
-                console.log('CSubs: added dialog id=' + this.id);
+                this.log('CSubs: added dialog id=' + this.id);
                 this.jssipUA.newDialog(this);
                 this.route_set = response.getHeaders('record-route').reverse();
                 if (this.route_set.length > 0)
@@ -87,7 +88,7 @@ class ClientSubscribeDialog {
             }
             let expires = this._getExpires(response);
             if (expires === -1) {
-                console.log('CSubs: Error: OK without Expires header');
+                this.log('CSubs: Error: OK without Expires header');
                 return;
             }
             if (expires > 0) {
@@ -110,7 +111,7 @@ class ClientSubscribeDialog {
         request.reply(200);
         let subsState = request.parseHeader('subscription-state');
         if (!subsState) {
-            console.log('CSubs: Error: NOTIFY without Subscription-State');
+            this.log('CSubs: Error: NOTIFY without Subscription-State');
             return;
         }
         let newState = subsState.state.toLowerCase();
@@ -125,7 +126,7 @@ class ClientSubscribeDialog {
                 const MaxTimeDeviation = 4000;
                 // Shorter and the difference is too big
                 if (this.expiresTS - notifyExpiresTS > MaxTimeDeviation) {
-                    console.log('CSubs: update sending re-SUBSCRIBE time');
+                    this.log('CSubs: update sending re-SUBSCRIBE time');
                     clearTimeout(this.expiresTimer);
                     this.expiresTS = notifyExpiresTS;
                     let timeout = this._calculateTimeoutMs(expires);
@@ -135,7 +136,7 @@ class ClientSubscribeDialog {
         }
         // active callback (dialog state switched to active)
         if (prevState !== 'active' && newState === 'active') {
-            console.log('CSubs>>> active: id=' + this.id);
+            this.log('CSubs>>> active: id=' + this.id);
             this.listeners.active(this);
         }
 
@@ -143,7 +144,7 @@ class ClientSubscribeDialog {
         let body = request.body;
         if (body) {
             let ct = request.getHeader('content-type');
-            console.log('CSubs>>> notify: id=' + this.id, body, ct);
+            this.log('CSubs>>> notify: id=' + this.id, body, ct);
             this.listeners.notify(this, request, body, ct);
         }
         // terminated callback (dialog state switched to terminated)
@@ -158,7 +159,7 @@ class ClientSubscribeDialog {
         let headers = this.headers.slice();
         if (body) {
             if (!this.contentType) {
-                console.log('CSubs: subscribe(): Error - contentType is not defined');
+                this.log('CSubs: subscribe(): Error - contentType is not defined');
                 throw 'CSubs.subscribe(): Missed contentType';
             }
             headers.push('Content-Type: ' + this.contentType);
@@ -182,10 +183,10 @@ class ClientSubscribeDialog {
         this.state = 'terminated';
         // remove dialog from dialogs table with some delay, to allow receive end NOTIFY
         setTimeout(() => {
-            console.log('CSubs: removed dialog id=' + this.id);
+            this.log('CSubs: removed dialog id=' + this.id);
             this.jssipUA.destroyDialog(this);
         }, 32000);
-        console.log(`CSubs>>> terminated: "${reason}" id=${this.id}`);
+        this.log(`CSubs>>> terminated: "${reason}" id=${this.id}`);
         this.listeners.terminated(this, reason);
     }
     _send(body, headers) {
@@ -200,7 +201,7 @@ class ClientSubscribeDialog {
         return expires >= 140 ? (expires * 1000 / 2) + Math.floor(((expires / 2) - 70) * 1000 * Math.random()) : (expires * 1000) - 5000;
     }
     _scheduleSubscribe(timeout) {
-        console.log('CSubs: next SUBSCRIBE will be sent in ' + Math.floor(timeout / 1000) + ' sec');
+        this.log('CSubs: next SUBSCRIBE will be sent in ' + Math.floor(timeout / 1000) + ' sec');
         this.expiresTimer = setTimeout(() => {
             this.expiresTimer = undefined;
             this._send(null, this.headers);
@@ -208,15 +209,15 @@ class ClientSubscribeDialog {
     }
 }
 
-
 /*
  * Server SUBSCRIBE dialog
  */
 class ServerSubscribeDialog {
-    constructor({ jssipUA, subscribe, contentType, headers, listeners, credential }) {
-        if( !jssipUA )
-          throw 'missed jssipUA';
+    constructor({ jssipUA, log, subscribe, contentType, headers, listeners, credential }) {
+        if (!jssipUA)
+            throw 'missed reference to JsSIP UA instance';
         this.jssipUA = jssipUA;
+        this.log = log ? log : console.log;
         this.expiresTS = null;
         this.expiresTimer = null;
         this.state = 'active';
@@ -254,7 +255,7 @@ class ServerSubscribeDialog {
             cseq: Math.floor(Math.random() * 10000 + 1),
         };
         this.id = this.params.call_id + this.params.from_tag + this.params.to_tag;
-        console.log('SSubs: add dialog id=' + this.id);
+        this.log('SSubs: add dialog id=' + this.id);
         this.jssipUA.newDialog(this);
         this._setExpiresTS();
         this._setExpiresTimer();
@@ -298,7 +299,7 @@ class ServerSubscribeDialog {
                 this.route_set = response.getHeaders('record-route').reverse();
                 if (this.route_set.length > 0)
                     this.params.route_set = this.route_set;
-                console.log('SSubs>>> active: id=' + this.id);
+                this.log('SSubs>>> active: id=' + this.id);
                 this.listeners.active(this);
             }
         } else if (response.status_code >= 300) {
@@ -318,7 +319,7 @@ class ServerSubscribeDialog {
         let body = request.body;
         if (body) {
             let ct = request.getHeader('content-type');
-            console.log('SSubs>>> subscribe: id=' + this.id, body, ct);
+            this.log('SSubs>>> subscribe: id=' + this.id, body, ct);
             this.listeners.subscribe(this, request, body, ct);
         }
 
@@ -337,10 +338,10 @@ class ServerSubscribeDialog {
         clearTimeout(this.expiresTimer);
         // if delay needed ?
         setTimeout(() => {
-            console.log('SSubs: remove dialog id=' + this.id);
+            this.log('SSubs: remove dialog id=' + this.id);
             this.jssipUA.destroyDialog(this);
         }, 32000);
-        console.log(`SSubs>>> terminated: "${reason}" id=${this.id}`);
+        this.log(`SSubs>>> terminated: "${reason}" id=${this.id}`);
         this.listeners.terminated(this, reason);
     }
     _setExpiresTS() {
