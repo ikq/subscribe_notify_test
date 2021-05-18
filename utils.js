@@ -151,7 +151,7 @@ class ClientSubscribeDialog {
             this.log(`CSubs>>> ${isTerminated ? 'terminated ' : ''} notify: id=` + this.id, body, ct);
             this.listeners.notify(this, isTerminated, request, body, ct);
         }
-        if (isTerminated) 
+        if (isTerminated)
             this._dialogTerminated('receive terminate notify');
     }
 
@@ -179,7 +179,7 @@ class ClientSubscribeDialog {
     }
 
     _dialogTerminated(reason) {
-        if( this.wasTerminated ) // to prevent duplicate call
+        if (this.wasTerminated) // to prevent duplicate call
             return;
         this.wasTerminated = true;
         this.state = 'terminated';
@@ -266,6 +266,7 @@ class ServerSubscribeDialog {
         this._setExpiresTimer();
         subscribe.reply(200, null, ['Expires: ' + this.expires, 'Contact: ' + this.contact]);
         this.wasTerminated = false;
+        this.terminatedReason = undefined;
         this.sendNotify(); // the first NOTIFY send automatically.
     }
 
@@ -280,6 +281,8 @@ class ServerSubscribeDialog {
         let subsState = this.state;
         if (this.state !== 'terminated') {
             subsState += ';expires=' + this._getExpiresTS();
+        } else if (this.terminatedReason) {
+            subsState += ';reason=' + this.terminatedReason;
         }
         let headers = this.headers.slice();
         headers.push('Subscription-State: ' + subsState);
@@ -291,11 +294,12 @@ class ServerSubscribeDialog {
         this.jssipUA.sendRequest('NOTIFY', this.target, this.params, headers, body, this, this.credential);
     }
 
-    sendTerminateNotify(body = null) {
+    sendTerminateNotify(body = null, reason = null) {
         if (this.terminateNotifyWereSent)
             return;
         this.terminateNotifyWereSent = true;
         this._dialogTerminated('send terminate notify');
+        this.terminatedReason = reason;
         this.sendNotify(body);
     }
 
@@ -330,9 +334,9 @@ class ServerSubscribeDialog {
             return;
         }
         let h = request.getHeader('expires');
-        if( h === undefined || h === null ){ // SUBSCRIBE without Expires. See RFC 6665 3.1.1
-          h = '1800'; // Set default expires value
-          this.log('SSubs>>> subscribe without Expires header. Set by default ' + h);
+        if (h === undefined || h === null) { // SUBSCRIBE without Expires. See RFC 6665 3.1.1
+            h = '1800'; // Set default expires value
+            this.log('SSubs>>> subscribe without Expires header. Set by default ' + h);
         }
         this.expires = parseInt(request.getHeader(h));
         request.reply(200, null, ['Expires: ' + this.expires, 'Contact: ' + this.contact]);
@@ -353,7 +357,7 @@ class ServerSubscribeDialog {
     }
 
     _dialogTerminated(reason) {
-        if( this.wasTerminated ) // to prevent duplicate call
+        if (this.wasTerminated) // to prevent duplicate call
             return;
         this.wasTerminated = true;
         this.state = 'terminated';
@@ -377,8 +381,12 @@ class ServerSubscribeDialog {
     _setExpiresTimer() {
         clearTimeout(this.expiresTimer);
         setTimeout(() => {
-            this._dialogTerminated('subscription expired');
+            if (this.terminateNotifyWereSent)
+                return;
+            this.terminatedReason = 'timeout';
+            this.terminateNotifyWereSent = true;
             this.sendNotify();
+            this._dialogTerminated('subscription expired');
         }, this.expires * 1000);
     }
 }
