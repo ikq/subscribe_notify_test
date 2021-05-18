@@ -61,6 +61,7 @@ class ClientSubscribeDialog {
         ]);
         if (this.allowEvents)
             this.headers.push('Allow-Events: ' + this.allowEvents);
+        this.wasTerminated = false;
         this.route_set = null;
         this.data = {};
     }
@@ -142,15 +143,14 @@ class ClientSubscribeDialog {
 
         // notify callback called only if NOTIFY has body
         let body = request.body;
+        let isTerminated = newState === 'terminated';
         if (body) {
             let ct = request.getHeader('content-type');
-            this.log('CSubs>>> notify: id=' + this.id, body, ct);
-            this.listeners.notify(this, request, body, ct);
+            this.log(`CSubs>>> ${isTerminated ? 'terminated ' : ''} notify: id=` + this.id, body, ct);
+            this.listeners.notify(this, isTerminated, request, body, ct);
         }
-        // terminated callback (dialog state switched to terminated)
-        if (newState === 'terminated') {
+        if (isTerminated) 
             this._dialogTerminated('receive terminate notify');
-        }
     }
 
     subscribe(body = null) {
@@ -177,10 +177,11 @@ class ClientSubscribeDialog {
     }
 
     _dialogTerminated(reason) {
-        if (this.state === 'terminated')
+        if( this.wasTerminated ) // to prevent duplicate call
             return;
-        clearTimeout(this.expiresTimer);
+        this.wasTerminated = true;
         this.state = 'terminated';
+        clearTimeout(this.expiresTimer);
         // remove dialog from dialogs table with some delay, to allow receive end NOTIFY
         setTimeout(() => {
             this.log('CSubs: removed dialog id=' + this.id);
@@ -213,14 +214,15 @@ class ClientSubscribeDialog {
  * Server SUBSCRIBE dialog
  */
 class ServerSubscribeDialog {
-    constructor({ jssipUA, log, subscribe, contentType, headers, listeners, credential }) {
+    constructor({ jssipUA, log, subscribe, contentType, headers, listeners, credential, pending }) {
         if (!jssipUA)
             throw 'missed reference to JsSIP UA instance';
         this.jssipUA = jssipUA;
         this.log = log ? log : console.log;
         this.expiresTS = null;
         this.expiresTimer = null;
-        this.state = 'active';
+        this.state = pending ? 'pending' : 'active';
+        this.terminateNotifyWereSent = false;
         this.receivedFirstNotifyResponse = false;
         this.id = null;
         this.eventName = subscribe.getHeader('event');
@@ -230,8 +232,6 @@ class ServerSubscribeDialog {
         this.expires = parseInt(subscribe.getHeader('expires'));
         if (!listeners)
             throw 'missed listeners';
-        if (!listeners.active)
-            throw 'missed listeners.active()';
         if (!listeners.subscribe)
             throw 'missed listeners.subscribe()';
         if (!listeners.terminated)
@@ -260,7 +260,15 @@ class ServerSubscribeDialog {
         this._setExpiresTS();
         this._setExpiresTimer();
         subscribe.reply(200, null, ['Expires: ' + this.expires, 'Contact: ' + this.contact]);
+        this.wasTerminated = false;
         this.sendNotify(); // the first NOTIFY send automatically.
+    }
+
+    setActiveState() {
+        if (this.state === 'pending') {
+            this.log('SSubs: state switched from "pending" to "active"');
+            this.state = 'active';
+        }
     }
 
     sendNotify(body = null) {
@@ -279,6 +287,9 @@ class ServerSubscribeDialog {
     }
 
     sendTerminateNotify(body = null) {
+        if (this.terminateNotifyWereSent)
+            return;
+        this.terminateNotifyWereSent = true;
         this._dialogTerminated('send terminate notify');
         this.sendNotify(body);
     }
@@ -299,15 +310,12 @@ class ServerSubscribeDialog {
                 this.route_set = response.getHeaders('record-route').reverse();
                 if (this.route_set.length > 0)
                     this.params.route_set = this.route_set;
-                this.log('SSubs>>> active: id=' + this.id);
-                this.listeners.active(this);
             }
         } else if (response.status_code >= 300) {
             this._dialogTerminated('receive notify non-OK response');
         }
     }
     // NOTIFY callbacks
-
     receiveRequest(request) {
         if (request.method !== 'SUBSCRIBE') {
             reply(405); // Method Not Allowed    
@@ -318,11 +326,12 @@ class ServerSubscribeDialog {
 
         let body = request.body;
         let ct = request.getHeader('content-type');
+        let isUnsubscribe = this.expires === 0;
         this.log('SSubs>>> subscribe: id=' + this.id, body, ct);
-        // Upon receive SUBSCRIBE server send NOTIFY
-        this.listeners.subscribe(this, request, body, ct);
+        // Upon receive SUBSCRIBE server must send NOTIFY.
+        this.listeners.subscribe(this, isUnsubscribe, request, body, ct);
 
-        if (this.expires === 0) {
+        if (isUnsubscribe) {
             this._dialogTerminated('receive un-subscribe');
         } else {
             this._setExpiresTS();
@@ -331,11 +340,12 @@ class ServerSubscribeDialog {
     }
 
     _dialogTerminated(reason) {
-        if (this.state === 'terminated')
+        if( this.wasTerminated ) // to prevent duplicate call
             return;
+        this.wasTerminated = true;
         this.state = 'terminated';
         clearTimeout(this.expiresTimer);
-        // if delay needed ?
+        // If delay needed ?
         setTimeout(() => {
             this.log('SSubs: remove dialog id=' + this.id);
             this.jssipUA.destroyDialog(this);
