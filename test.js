@@ -1,3 +1,4 @@
+
 /*
   SUBSCRIBE test
  */
@@ -95,7 +96,7 @@ function guiInit() {
     document.getElementById('send_next_subscribe_btn').onclick = guiSendNextSubscribe;
     document.getElementById('send_unsubscribe_btn').onclick = guiSendUnsubscribe;
     document.getElementById('send_notify_btn').onclick = guiSendNotify;
-    document.getElementById('send_terminate_notify_btn').onclick = guiSendTerminateNotify;
+    document.getElementById('send_final_notify_btn').onclick = guiSendFinalNotify;
 
     if (server.domain && server.addresses && account.user && account.password) {
         try {
@@ -231,7 +232,7 @@ function guiSubscribeButtons() {
     document.getElementById('send_next_subscribe_btn').disabled = !clientSubscribeDialog;
     document.getElementById('send_unsubscribe_btn').disabled = !clientSubscribeDialog;
     document.getElementById('send_notify_btn').disabled = !serverSubscribeDialog;
-    document.getElementById('send_terminate_notify_btn').disabled = !serverSubscribeDialog;
+    document.getElementById('send_final_notify_btn').disabled = !serverSubscribeDialog;
 }
 
 //------------ client SUBSCRIBE/NOTIFY dialog  ----------------------
@@ -341,7 +342,7 @@ function createServerSubscribeDialog(subscribe) {
         },
         terminated(dlg, reason) {
             guiWarning(`server dialog: terminated (${reason})`);
-            dlg.sendTerminateNotify('Terminate notify. Provide current system state (if was)');
+            dlg.sendFinalNotify('Final notify. Provide current system state (if was)');
             serverSubscribeDialog = null;
             guiSubscribeButtons();
         }
@@ -364,10 +365,10 @@ function guiSendNotify() {
     serverSubscribeDialog.sendNotify('Hi !');
 }
 
-function guiSendTerminateNotify() {
+function guiSendFinalNotify() {
     if (serverSubscribeDialog === null || serverSubscribeDialog.state === 'terminated') {
         guiWarning('No server subscribe dialog');
         return;
     }
-    serverSubscribeDialog.sendTerminateNotify();
+    serverSubscribeDialog.sendFinalNotify();
 }
