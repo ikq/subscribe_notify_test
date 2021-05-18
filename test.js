@@ -1,4 +1,3 @@
-
 /*
   SUBSCRIBE test
  */
@@ -45,7 +44,7 @@ function incomingSubscribe(subscribe, eventName, accepts) {
 
 function guiInit() {
     document.getElementById('setting_btn').onclick = () => { guiShowPanel('setting_panel'); }
-    document.getElementById('subscribe_btn').onclick = guiSubscribe;
+    document.getElementById('subscribe_test_btn').onclick = guiSubscribeTest;
 
     //----------- set server and account fields in HTML ------------
     document.querySelector('#setting [name=sip_domain]').value = server.domain;
@@ -90,7 +89,7 @@ function guiInit() {
         location.reload();
     }
 
-    document.getElementById('subscribe_btn').onclick = guiSubscribe;
+    document.getElementById('subscribe_test_btn').onclick = guiSubscribeTest;
     document.getElementById('subscribe_return_btn').onclick = function () { guiInfo(''); guiShowPanel('main_panel'); }
     document.getElementById('send_init_subscribe_btn').onclick = guiSendInitSubscribe;
     document.getElementById('send_next_subscribe_btn').onclick = guiSendNextSubscribe;
@@ -221,7 +220,7 @@ function guiShowPanel(activePanel) {
 }
 
 //--------------- Subscribe GUI -------------------------------
-function guiSubscribe() {
+function guiSubscribeTest() {
     guiInfo('');
     guiShowPanel('subscribe_panel');
     guiSubscribeButtons();
@@ -274,13 +273,13 @@ function guiSendInitSubscribe() {
     let listeners = {
         active: (dlg) => {
             guiInfo('client dialog: active');
-            guiSubscribeButtons();
         },
-        notify: (dlg, notify, body, contentType) => { // with not empty body
-            console.log('receive NOTIFY', notify, body, contentType);
+        notify: (dlg, isTerminated, notify, body, contentType) => { // with not empty body
+            console.log(`receive ${isTerminated ? 'terminate-' : ''}NOTIFY`, notify, body, contentType);
             guiInfo('receive NOTIFY');
         },
         terminated: (dlg, reason) => {
+            console.log(`client dialog: terminated (${reason})`);
             guiWarning(`client dialog: terminated (${reason})`);
             clientSubscribeDialog = null;
             guiSubscribeButtons();
@@ -305,6 +304,7 @@ function guiSendInitSubscribe() {
     }
 
     clientSubscribeDialog.subscribe();
+    guiSubscribeButtons();
 }
 
 function guiSendNextSubscribe() {
@@ -328,33 +328,38 @@ function createServerSubscribeDialog(subscribe) {
     const ourContentType = 'text/plain';
 
     let listeners = {
-        active: (dlg) => {
-            guiInfo('server dialog: active');
-            guiSubscribeButtons();
-        },
-        subscribe(dlg, subscribe, body, contentType) { 
-            console.log('receive SUBSCRIBE', subscribe, body, contentType);
+        subscribe(dlg, isUnsubscribe, subscribe, body, contentType) {
+            console.log(`receive ${isUnsubscribe ? 'un-' : ''}SUBSCRIBE`, subscribe, body, contentType, isUnsubscribe);
             guiInfo('receive SUBSCRIBE');
-            let expires = parseInt(subscribe.getHeader('expires'));
-            if( expires === 0 ){
-              dlg.sendTerminateNotify('Terminate notify with current system state');
-            } else {
-              dlg.sendNotify('Notify current system state');
+            if (!isUnsubscribe) {
+                if (dlg.state === 'pending') {
+                    dlg.sendNotify('Dialog state is pending. Do not provide system state');
+                } else {
+                    dlg.sendNotify('Provide current system state');
+                }
             }
         },
         terminated(dlg, reason) {
             guiWarning(`server dialog: terminated (${reason})`);
+            dlg.sendTerminateNotify('Terminate notify. Provide current system state (if was)');
             serverSubscribeDialog = null;
             guiSubscribeButtons();
         }
     }
-    serverSubscribeDialog = new ServerSubscribeDialog({ jssipUA, subscribe, contentType: ourContentType, listeners });
+    let pending = true; // server dialog can be created in 'active' or 'pending' state
+    serverSubscribeDialog = new ServerSubscribeDialog({ jssipUA, subscribe, contentType: ourContentType, listeners, pending });
+    guiSubscribeButtons();
 }
 
 function guiSendNotify() {
     if (serverSubscribeDialog === null || serverSubscribeDialog.state === 'terminated') {
         guiWarning('No server subscribe dialog');
         return;
+    }
+    // Switch state from pending to active.
+    if (serverSubscribeDialog.state === 'pending') {
+        console.log('Switch state from "pending" to "active"');
+        serverSubscribeDialog.setActiveState();
     }
     serverSubscribeDialog.sendNotify('Hi !');
 }
