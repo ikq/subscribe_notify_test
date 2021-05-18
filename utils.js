@@ -109,16 +109,18 @@ class ClientSubscribeDialog {
             reply(405); // Method Not Allowed    
             return;
         }
-        request.reply(200);
         let subsState = request.parseHeader('subscription-state');
         if (!subsState) {
             this.log('CSubs: Error: NOTIFY without Subscription-State');
+            reply(400); // Bad request
             return;
         }
+        request.reply(200);
+
+        // update state
         let newState = subsState.state.toLowerCase();
         let prevState = this.state;
 
-        // update dialog state
         if (prevState !== 'terminated' && newState !== 'terminated') {
             this.state = newState;
             if (subsState.expires !== undefined) {
@@ -211,7 +213,10 @@ class ClientSubscribeDialog {
 }
 
 /*
- * Server SUBSCRIBE dialog
+    Server SUBSCRIBE dialog
+
+    Not implemented:
+    - fetch-SUBSCRIBE (initial SUBSCRIBE with expires:0), see RFC 6665 4.4.3.
  */
 class ServerSubscribeDialog {
     constructor({ jssipUA, log, subscribe, contentType, headers, listeners, credential, pending }) {
@@ -293,6 +298,7 @@ class ServerSubscribeDialog {
         this._dialogTerminated('send terminate notify');
         this.sendNotify(body);
     }
+
     // NOTIFY callbacks
     onAuthenticated() {
         this.params.cseq++;
@@ -315,13 +321,20 @@ class ServerSubscribeDialog {
             this._dialogTerminated('receive notify non-OK response');
         }
     }
-    // NOTIFY callbacks
+    // end of NOTIFY callbacks
+
+    // dialog callback
     receiveRequest(request) {
         if (request.method !== 'SUBSCRIBE') {
             reply(405); // Method Not Allowed    
             return;
         }
-        this.expires = parseInt(request.getHeader('expires'));
+        let h = request.getHeader('expires');
+        if( h === undefined || h === null ){ // SUBSCRIBE without Expires. See RFC 6665 3.1.1
+          h = '1800'; // Set default expires value
+          this.log('SSubs>>> subscribe without Expires header. Set by default ' + h);
+        }
+        this.expires = parseInt(request.getHeader(h));
         request.reply(200, null, ['Expires: ' + this.expires, 'Contact: ' + this.contact]);
 
         let body = request.body;
