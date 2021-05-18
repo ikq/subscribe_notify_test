@@ -145,14 +145,14 @@ class ClientSubscribeDialog {
 
         // notify callback called only if NOTIFY has body
         let body = request.body;
-        let isTerminated = newState === 'terminated';
+        let isFinal = newState === 'terminated';
         if (body) {
             let ct = request.getHeader('content-type');
-            this.log(`CSubs>>> ${isTerminated ? 'terminated ' : ''} notify: id=` + this.id, body, ct);
-            this.listeners.notify(this, isTerminated, request, body, ct);
+            this.log(`CSubs>>> ${isFinal ? 'final ' : ''} notify: id=` + this.id, body, ct);
+            this.listeners.notify(this, isFinal, request, body, ct);
         }
-        if (isTerminated)
-            this._dialogTerminated('receive terminate notify');
+        if (isFinal)
+            this._dialogTerminated('receive final notify');
     }
 
     subscribe(body = null) {
@@ -227,7 +227,7 @@ class ServerSubscribeDialog {
         this.expiresTS = null;
         this.expiresTimer = null;
         this.state = pending ? 'pending' : 'active';
-        this.terminateNotifyWereSent = false;
+        this.finalNotifyWasSent = false;
         this.receivedFirstNotifyResponse = false;
         this.id = null;
         this.eventName = subscribe.getHeader('event');
@@ -294,11 +294,11 @@ class ServerSubscribeDialog {
         this.jssipUA.sendRequest('NOTIFY', this.target, this.params, headers, body, this, this.credential);
     }
 
-    sendTerminateNotify(body = null, reason = null) {
-        if (this.terminateNotifyWereSent)
+    sendFinalNotify(body = null, reason = null) {
+        if (this.finalNotifyWasSent)
             return;
-        this.terminateNotifyWereSent = true;
-        this._dialogTerminated('send terminate notify');
+        this.finalNotifyWasSent = true;
+        this._dialogTerminated('send final notify');
         this.terminatedReason = reason;
         this.sendNotify(body);
     }
@@ -338,7 +338,7 @@ class ServerSubscribeDialog {
             h = '1800'; // Set default expires value
             this.log('SSubs>>> subscribe without Expires header. Set by default ' + h);
         }
-        this.expires = parseInt(request.getHeader(h));
+        this.expires = parseInt(h);
         request.reply(200, null, ['Expires: ' + this.expires, 'Contact: ' + this.contact]);
 
         let body = request.body;
@@ -381,10 +381,10 @@ class ServerSubscribeDialog {
     _setExpiresTimer() {
         clearTimeout(this.expiresTimer);
         setTimeout(() => {
-            if (this.terminateNotifyWereSent)
+            if (this.finalNotifyWasSent)
                 return;
             this.terminatedReason = 'timeout';
-            this.terminateNotifyWereSent = true;
+            this.finalNotifyWasSent = true;
             this.sendNotify();
             this._dialogTerminated('subscription expired');
         }, this.expires * 1000);
