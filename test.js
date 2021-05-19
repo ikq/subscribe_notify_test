@@ -349,6 +349,8 @@ function createServerSubscribeDialog(subscribe) {
     }
     let pending = true; // server dialog can be created in 'active' or 'pending' state
     serverSubscribeDialog = new ServerSubscribeDialog({ jssipUA, subscribe, contentType: ourContentType, listeners, pending });
+    serverSubscribeDialog.sendNotify();  // Send 1st NOTIFY immediately. Can be with or without body.
+
     guiSubscribeButtons();
 }
 
