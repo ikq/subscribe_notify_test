@@ -267,7 +267,6 @@ class ServerSubscribeDialog {
         subscribe.reply(200, null, ['Expires: ' + this.expires, 'Contact: ' + this.contact]);
         this.wasTerminated = false;
         this.terminatedReason = undefined;
-        this.sendNotify(); // the first NOTIFY send automatically.
     }
 
     setActiveState() {
