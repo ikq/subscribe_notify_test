@@ -334,8 +334,8 @@ class ServerSubscribeDialog {
         }
         let h = request.getHeader('expires');
         if (h === undefined || h === null) { // SUBSCRIBE without Expires. See RFC 6665 3.1.1
-            h = '1800'; // Set default expires value
-            this.log('SSubs>>> subscribe without Expires header. Set by default ' + h);
+            h = '900'; // Set default expires value
+            this.log('SSubs: subscribe without Expires header. Set by default ' + h);
         }
         this.expires = parseInt(h);
         request.reply(200, null, ['Expires: ' + this.expires, 'Contact: ' + this.contact]);
