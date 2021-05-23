@@ -245,30 +245,30 @@ function guiSendInitSubscribe() {
     return;
   }
 
-  let domain = server.domain;
-  let target = sendToUser + '@' + domain;
-  let callee = sendToUser;
-  let calleeDN = null;
-  let caller = account.user;
-  let callerDN = null;
+  let target = sendToUser; 
 
-  // params is optional.
-  // set if the user and host are different from the used in REGISTER
+  let params = null;
+  /*
+  params is optional.
+  Used if domain or from-user is different from used in REGISTER/INVITE
+
   let params = {
-    to_uri: new JsSIP.URI('sip', callee, domain),
-    to_display_name: calleeDN,
-    from_uri: new JsSIP.URI('sip', caller, domain),
-    from_display_name: callerDN,
+    to_uri: new JsSIP.URI('sip', target, server.domain),
+    to_display_name: null,
+    from_uri: new JsSIP.URI('sip', account.user, server.domain),
+    from_display_name: null,
   }
+  */
 
-  /* credential is optional.
-   allows use authentication different from REGISTER/INVITE
+  let credential = null;
+  /* 
+   credential is optional.
+   Used if authentication is different from REGISTER/INVITE
   let credential = {
       authorization_user: phone.account.authUser ? phone.account.authUser : phone.account.user,
       password: phone.account.password
   };
   */
-  let credential = null;
 
   try {
     subscriber = jssipUA.subscriber(target, {
