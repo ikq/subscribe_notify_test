@@ -16628,7 +16628,7 @@ var C = {
   NOTIFY_TRANSPORT_ERROR: 1,
   NOTIFY_NON_OK_RESPONSE: 2,
   SEND_FINAL_NOTIFY: 3,
-  RECEIVED_UNSUBSCRIBE: 4,
+  RECEIVE_UNSUBSCRIBE: 4,
   SUBSCRIPTION_EXPIRED: 5
 };
 /**
@@ -16704,7 +16704,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     _this.id = "".concat(_this.params.call_id).concat(_this.params.from_tag).concat(_this.params.to_tag);
     debug('add dialog id=', _this.id);
 
-    _this._ua.newDialog(_assertThisInitialized(_this)); // Set expires timerstamp and timer
+    _this._ua.newDialog(_assertThisInitialized(_this)); // Set expires time-stamp and timer
 
 
     _this._setExpiresTimestamp();
@@ -16788,7 +16788,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       this.emit('subscribe', is_unsubscribe, request, body, content_type);
 
       if (is_unsubscribe) {
-        this._dialogTerminated(C.RECEIVED_UNSUBSCRIBE);
+        this._dialogTerminated(C.RECEIVE_UNSUBSCRIBE);
       } else {
         this._setExpiresTimestamp();
 
@@ -16896,7 +16896,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
         this._ua.destroyDialog(this);
       }
 
-      var send_final_notify = termination_code === C.RECEIVED_UNSUBSCRIBE || termination_code === C.SUBSCRIPTION_EXPIRED;
+      var send_final_notify = termination_code === C.RECEIVE_UNSUBSCRIBE || termination_code === C.SUBSCRIPTION_EXPIRED;
       debug("emit \"terminated\" termination code=".concat(termination_code, ", send final notify=").concat(send_final_notify));
       this.emit('terminated', termination_code, send_final_notify);
     }

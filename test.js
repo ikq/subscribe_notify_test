@@ -366,7 +366,7 @@ function notifierTerminationText(notifier, terminationCode) {
         case notifier.C.NOTIFY_TRANSPORT_ERROR: return 'NOTIFY transport error';
         case notifier.C.NOTIFY_NON_OK_RESPONSE: return 'NOTIFY non-OK response';
         case notifier.C.SEND_FINAL_NOTIFY: return 'Send final NOTIFY';
-        case notifier.C.RECEIVED_UNSUBSCRIBE: return 'Received un-SUBSCRIBE';
+        case notifier.C.RECEIVE_UNSUBSCRIBE: return 'Receive un-SUBSCRIBE';
         case notifier.C.SUBSCRIPTION_EXPIRED: return 'Subscription expired';
         default: return 'unknown termination code';
     }
