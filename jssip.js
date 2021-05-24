@@ -16683,7 +16683,11 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     _this.credential = credential;
     _this.contact = "<sip:".concat(subscribe.to.uri.user, "@").concat(Utils.createRandomToken(12), ".invalid;transport=ws>");
     _this.rcseq = subscribe.cseq;
-    _this.headers = headers ? headers : [];
+    _this.headers = Utils.cloneArray(headers);
+
+    _this.headers.push("Event: ".concat(_this.event_name));
+
+    _this.headers.push("Contact: ".concat(_this.contact));
 
     if (_this.allow_events) {
       _this.headers.push("Allow-Events: ".concat(_this.allow_events));
@@ -16832,7 +16836,6 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
       var headers = this.headers.slice();
       headers.push("Subscription-State: ".concat(subs_state));
-      headers.push("Event: ".concat(this.event_name));
 
       if (body) {
         headers.push("Content-Type: ".concat(this.content_type));
@@ -22735,7 +22738,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
     _this.content_type = content_type;
     _this.is_first_notify_request = true;
-    _this.params = params ? Utils.cloneObject(params) : {};
+    _this.params = Utils.cloneObject(params);
 
     if (!_this.params.from_uri) {
       _this.params.from_uri = _this._ua.configuration.uri;
@@ -22758,12 +22761,8 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
     _this.expires_timer = null;
     _this.expires_timestamp = null;
-
-    if (!headers) {
-      headers = [];
-    }
-
-    _this.headers = headers.concat(["Event: ".concat(_this.event_name), "Accept: ".concat(_this.accept), "Expires: ".concat(_this.expires), "Contact: ".concat(_this.contact)]);
+    _this.headers = Utils.cloneArray(headers);
+    _this.headers = _this.headers.concat(["Event: ".concat(_this.event_name), "Accept: ".concat(_this.accept), "Expires: ".concat(_this.expires), "Contact: ".concat(_this.contact)]);
 
     if (_this.allow_events) {
       _this.headers.push("Allow-Events: ".concat(_this.allow_events));
