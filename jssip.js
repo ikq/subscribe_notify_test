@@ -16627,9 +16627,10 @@ var C = {
   NOTIFY_RESPONSE_TIMEOUT: 0,
   NOTIFY_TRANSPORT_ERROR: 1,
   NOTIFY_NON_OK_RESPONSE: 2,
-  SEND_FINAL_NOTIFY: 3,
-  RECEIVE_UNSUBSCRIBE: 4,
-  SUBSCRIPTION_EXPIRED: 5
+  NOTIFY_FAILED_AUTHENTICATION: 3,
+  SEND_FINAL_NOTIFY: 4,
+  RECEIVE_UNSUBSCRIBE: 5,
+  SUBSCRIPTION_EXPIRED: 6
 };
 /**
  * It's implementation of RFC 6665 Notifier
@@ -16759,6 +16760,8 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
             this.params.route_set = this.route_set;
           }
         }
+      } else if (response.status_code === 401 || response.status_code === 407) {
+        this._dialogTerminated(C.NOTIFY_FAILED_AUTHENTICATION);
       } else if (response.status_code >= 300) {
         this._dialogTerminated(C.NOTIFY_NON_OK_RESPONSE);
       }
@@ -22669,9 +22672,10 @@ var C = {
   SUBSCRIBE_RESPONSE_TIMEOUT: 0,
   SUBSCRIBE_TRANSPORT_ERROR: 1,
   SUBSCRIBE_NON_OK_RESPONSE: 2,
-  SEND_UNSUBSCRIBE: 3,
-  RECEIVE_FINAL_NOTIFY: 4,
-  RECEIVE_BAD_NOTIFY: 5
+  SUBSCRIBE_FAILED_AUTHENTICATION: 3,
+  SEND_UNSUBSCRIBE: 4,
+  RECEIVE_FINAL_NOTIFY: 5,
+  RECEIVE_BAD_NOTIFY: 6
 };
 /**
  * It's implementation of RFC 6665 Subscriber
@@ -22845,6 +22849,8 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
           this._scheduleSubscribe(this._calculateTimeoutMs(expires));
         }
+      } else if (response.status_code === 401 || response.status_code === 407) {
+        this._dialogTerminated(C.SUBSCRIBE_FAILED_AUTHENTICATION);
       } else if (response.status_code >= 300) {
         this._dialogTerminated(C.SUBSCRIBE_NON_OK_RESPONSE);
       }
@@ -23026,9 +23032,10 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
           _this2._ua.destroyDialog(_this2);
         }, 32000);
-        debug("emit \"terminated\" termination code=".concat(termination_code, "\""));
-        this.emit('terminated', termination_code);
       }
+
+      debug("emit \"terminated\" termination code=".concat(termination_code, "\""));
+      this.emit('terminated', termination_code);
     }
   }, {
     key: "_send",

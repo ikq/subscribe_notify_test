@@ -306,6 +306,7 @@ function subscriberTerminationText(subscriber, terminationCode) {
         case subscriber.C.SUBSCRIBE_RESPONSE_TIMEOUT: return 'SUBSCRIBE response timeout';
         case subscriber.C.SUBSCRIBE_TRANSPORT_ERROR: return 'SUBSCRIBE transport error';
         case subscriber.C.SUBSCRIBE_NON_OK_RESPONSE: return 'SUBSCRIBE non-OK response';
+        case subscriber.C.SUBSCRIBE_FAILED_AUTHENTICATION: return 'SUBSCRIBE failed authentication';
         case subscriber.C.SEND_UNSUBSCRIBE: return 'Send un-UNSUBSCRIBE';
         case subscriber.C.RECEIVE_FINAL_NOTIFY: return 'Receive final NOTIFY';
         case subscriber.C.RECEIVE_BAD_NOTIFY: return 'Receive bad NOTIFY';
@@ -366,6 +367,7 @@ function notifierTerminationText(notifier, terminationCode) {
         case notifier.C.NOTIFY_RESPONSE_TIMEOUT: return 'NOTIFY response timeout';
         case notifier.C.NOTIFY_TRANSPORT_ERROR: return 'NOTIFY transport error';
         case notifier.C.NOTIFY_NON_OK_RESPONSE: return 'NOTIFY non-OK response';
+        case notifier.C.NOTIFY_FAILED_AUTHENTICATION: return 'NOTIFY failed authentication';
         case notifier.C.SEND_FINAL_NOTIFY: return 'Send final NOTIFY';
         case notifier.C.RECEIVE_UNSUBSCRIBE: return 'Receive un-SUBSCRIBE';
         case notifier.C.SUBSCRIPTION_EXPIRED: return 'Subscription expired';
