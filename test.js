@@ -197,9 +197,8 @@ function incomingSubscribe(subscribe, eventName, accepts) {
     const ourContentType = 'text/plain';
 
     // Check event type
-    if (!eventName || eventName.toLowerCase() !== ourEventName) {
-        console.log(typeof lcEventName, typeof ourEventName);
-        guiWarning('receive SUBSCRIBE: not supported event');
+    if (eventName !== ourEventName) {
+        guiWarning('receive SUBSCRIBE: not supported our event');
         return 489; // send SIP response 489 Bad Event
     }
     // Check if accept header includes our content-type
@@ -270,7 +269,7 @@ function guiSendInitSubscribe() {
 
     try {
         subscriber = jssipUA.subscriber(target, {
-            event_name: eventName,
+            event_name: eventName, // event name with optional ;id=xxx
             accept: 'application/pidf+xml,text/json,text/plain',
             expires: expires,
             content_type: 'text/plain',
@@ -309,6 +308,8 @@ function subscriberTerminationText(subscriber, terminationCode) {
         case subscriber.C.SUBSCRIBE_NON_OK_RESPONSE: return 'SUBSCRIBE non-OK response';
         case subscriber.C.SEND_UNSUBSCRIBE: return 'Send un-UNSUBSCRIBE';
         case subscriber.C.RECEIVE_FINAL_NOTIFY: return 'Receive final NOTIFY';
+        case subscriber.C.RECEIVE_BAD_NOTIFY: return 'Receive bad NOTIFY';
+
         default: return 'unknown termination code';
     }
 }

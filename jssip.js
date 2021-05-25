@@ -22654,6 +22654,8 @@ var JsSIP_C = require('./Constants');
 
 var Utils = require('./Utils');
 
+var Grammar = require('./Grammar');
+
 var debug = require('debug')('JsSIP:Subscriber');
 
 var debugerror = require('debug')('JsSIP:ERROR:Subscriber');
@@ -22668,7 +22670,8 @@ var C = {
   SUBSCRIBE_TRANSPORT_ERROR: 1,
   SUBSCRIBE_NON_OK_RESPONSE: 2,
   SEND_UNSUBSCRIBE: 3,
-  RECEIVE_FINAL_NOTIFY: 4
+  RECEIVE_FINAL_NOTIFY: 4,
+  RECEIVE_BAD_NOTIFY: 5
 };
 /**
  * It's implementation of RFC 6665 Subscriber
@@ -22683,7 +22686,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
    * -param {Object} ua reference to JsSIP.UA
    * -param {String} target
    * -param {Object} options 
-   *   -param {String} event_name Event header value
+   *   -param {String} event_name Event header value. May end with optional ;id=xxx
    *   -param {String} accept Accept header value
    *   -param {Number} expires Expires header value. Optional. Default is 900
    *   -param {String} content_type Content-Type header value
@@ -22721,7 +22724,14 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       throw new TypeError('event_name is undefined');
     }
 
-    _this.event_name = event_name;
+    var parsed = Grammar.parse(event_name, 'Event');
+
+    if (parsed === -1) {
+      throw new TypeError('event_name - wrong format');
+    }
+
+    _this.event_name = parsed.event;
+    _this.event_id = parsed.params && parsed.params.id;
 
     if (!accept) {
       throw new TypeError('accept is undefined');
@@ -22762,7 +22772,13 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     _this.expires_timer = null;
     _this.expires_timestamp = null;
     _this.headers = Utils.cloneArray(headers);
-    _this.headers = _this.headers.concat(["Event: ".concat(_this.event_name), "Accept: ".concat(_this.accept), "Expires: ".concat(_this.expires), "Contact: ".concat(_this.contact)]);
+    var event_value = _this.event_name;
+
+    if (_this.event_id) {
+      event_value += ";id=".concat(_this.event_id);
+    }
+
+    _this.headers = _this.headers.concat(["Event: ".concat(event_value), "Expires: ".concat(_this.expires), "Accept: ".concat(_this.accept), "Contact: ".concat(_this.contact)]);
 
     if (_this.allow_events) {
       _this.headers.push("Allow-Events: ".concat(_this.allow_events));
@@ -22841,15 +22857,44 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     key: "receiveRequest",
     value: function receiveRequest(request) {
       if (request.method !== JsSIP_C.NOTIFY) {
+        debugerror('received non-NOTIFY request');
         request.reply(405);
         return;
+      } // RFC 6665 8.2.1. Check if event header matches
+
+
+      var event_header = request.parseHeader('Event');
+
+      if (!event_header) {
+        debugerror('missed Event header');
+        request.reply(400);
+
+        this._dialogTerminated(C.RECEIVE_BAD_NOTIFY);
+
+        return;
       }
+
+      var event_name = event_header.event;
+      var event_id = event_header.params && event_header.params.id;
+
+      if (event_name !== this.event_name || event_id !== this.event_id) {
+        debugerror('Event header does not match SUBSCRIBE');
+        request.reply(489);
+
+        this._dialogTerminated(C.RECEIVE_BAD_NOTIFY);
+
+        return;
+      } // Process Subscription-State header
+
 
       var subs_state = request.parseHeader('subscription-state');
 
       if (!subs_state) {
-        debugerror('missed header Subscription-State');
+        debugerror('missed Subscription-State header');
         request.reply(400);
+
+        this._dialogTerminated(C.RECEIVE_BAD_NOTIFY);
+
         return;
       }
 
@@ -22938,13 +22983,15 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     key: "unsubscribe",
     value: function unsubscribe() {
       var body = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : null;
-      debug('unsubscribe()');
+      debug('unsubscribe()'); // Set header Expires: 0
 
-      this._dialogTerminated(C.SEND_UNSUBSCRIBE);
-
-      var headers = ["Event: ".concat(this.event_name), 'Expires: 0'];
+      var headers = this.headers.map(function (s) {
+        return s.startsWith('Expires') ? 'Expires: 0' : s;
+      });
 
       this._send(body, headers);
+
+      this._dialogTerminated(C.SEND_UNSUBSCRIBE);
     }
     /**
      * Get dialog state
@@ -23026,7 +23073,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
   return Subscriber;
 }(EventEmitter);
-},{"./Constants":2,"./Utils":28,"debug":32,"events":31}],23:[function(require,module,exports){
+},{"./Constants":2,"./Grammar":7,"./Utils":28,"debug":32,"events":31}],23:[function(require,module,exports){
 "use strict";
 
 var T1 = 500,
