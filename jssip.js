@@ -16666,38 +16666,37 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     debug('new');
     _this = _super.call(this);
     _this._ua = ua;
-    _this.expires_timestamp = null;
-    _this.expires_timer = null;
+    _this._expires_timestamp = null;
+    _this._expires_timer = null;
     _this._state = pending ? 'pending' : 'active';
-    _this.is_final_notify_sent = false;
-    _this.is_first_notify_response = true;
-    _this.id = null;
-    _this.allow_events = allow_events;
-    _this.event_name = subscribe.getHeader('event');
+    _this._is_final_notify_sent = false;
+    _this._is_first_notify_response = true;
+    _this._id = null;
+    _this._allow_events = allow_events;
+    _this._event_name = subscribe.getHeader('event');
 
     if (!content_type) {
       throw new TypeError('content_type is undefined');
     }
 
-    _this.content_type = content_type;
-    _this.expires = parseInt(subscribe.getHeader('expires'));
-    _this.credential = credential;
-    _this.contact = "<sip:".concat(subscribe.to.uri.user, "@").concat(Utils.createRandomToken(12), ".invalid;transport=ws>");
-    _this.rcseq = subscribe.cseq;
-    _this.headers = Utils.cloneArray(headers);
+    _this._content_type = content_type;
+    _this._expires = parseInt(subscribe.getHeader('expires'));
+    _this._credential = credential;
+    _this._contact = "<sip:".concat(subscribe.to.uri.user, "@").concat(Utils.createRandomToken(12), ".invalid;transport=ws>");
+    _this._headers = Utils.cloneArray(headers);
 
-    _this.headers.push("Event: ".concat(_this.event_name));
+    _this._headers.push("Event: ".concat(_this._event_name));
 
-    _this.headers.push("Contact: ".concat(_this.contact));
+    _this._headers.push("Contact: ".concat(_this._contact));
 
-    if (_this.allow_events) {
-      _this.headers.push("Allow-Events: ".concat(_this.allow_events));
+    if (_this._allow_events) {
+      _this._headers.push("Allow-Events: ".concat(_this._allow_events));
     }
 
-    _this.target = subscribe.from.uri.user;
+    _this._target = subscribe.from.uri.user;
     subscribe.to_tag = Utils.newTag(); // NOTIFY request params set according received SUBSCRIBE
 
-    _this.params = {
+    _this._params = {
       from: subscribe.to,
       from_tag: subscribe.to_tag,
       to: subscribe.from,
@@ -16706,21 +16705,19 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       cseq: Math.floor(Math.random() * 10000 + 1)
     }; // Dialog id
 
-    _this.id = "".concat(_this.params.call_id).concat(_this.params.from_tag).concat(_this.params.to_tag);
-    debug('add dialog id=', _this.id);
+    _this._id = "".concat(_this._params.call_id).concat(_this._params.from_tag).concat(_this._params.to_tag);
+    debug('add dialog id=', _this._id);
 
-    _this._ua.newDialog(_assertThisInitialized(_this)); // Set expires time-stamp and timer
+    _this._ua.newDialog(_assertThisInitialized(_this)); // Set expires timer and timestamp
 
-
-    _this._setExpiresTimestamp();
 
     _this._setExpiresTimer();
 
-    _this.is_terminated = false;
-    _this.terminated_reason = undefined; // Custom session empty object for high level use.
+    _this._is_terminated = false;
+    _this._terminated_reason = undefined; // Custom session empty object for high level use.
 
     _this.data = {};
-    subscribe.reply(200, null, ["Expires: ".concat(_this.expires), "Contact: ".concat(_this.contact)]);
+    subscribe.reply(200, null, ["Expires: ".concat(_this._expires), "Contact: ".concat(_this._contact)]);
     return _this;
   }
   /**
@@ -16736,7 +16733,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
   }, {
     key: "onAuthenticated",
     value: function onAuthenticated() {
-      this.params.cseq++;
+      this._params.cseq++;
     }
   }, {
     key: "onRequestTimeout",
@@ -16752,12 +16749,12 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     key: "onReceiveResponse",
     value: function onReceiveResponse(response) {
       if (response.status_code >= 200 && response.status_code < 300) {
-        if (this.is_first_notify_response) {
-          this.is_first_notify_response = false;
-          this.route_set = response.getHeaders('record-route').reverse();
+        if (this._is_first_notify_response) {
+          this._is_first_notify_response = false;
+          var route_set = response.getHeaders('record-route').reverse();
 
-          if (this.route_set.length > 0) {
-            this.params.route_set = this.route_set;
+          if (route_set.length > 0) {
+            this._params.route_set = route_set;
           }
         }
       } else if (response.status_code === 401 || response.status_code === 407) {
@@ -16786,19 +16783,17 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
         debug("Missed expires header. Set by default ".concat(h));
       }
 
-      this.expires = parseInt(h);
-      request.reply(200, null, ["Expires: ".concat(this.expires), "Contact: ".concat(this.contact)]);
+      this._expires = parseInt(h);
+      request.reply(200, null, ["Expires: ".concat(this._expires), "Contact: ".concat(this._contact)]);
       var body = request.body;
       var content_type = request.getHeader('content-type');
-      var is_unsubscribe = this.expires === 0;
+      var is_unsubscribe = this._expires === 0;
       debug('emit "subscribe"');
       this.emit('subscribe', is_unsubscribe, request, body, content_type);
 
       if (is_unsubscribe) {
         this._dialogTerminated(C.RECEIVE_UNSUBSCRIBE);
       } else {
-        this._setExpiresTimestamp();
-
         this._setExpiresTimer();
       }
     }
@@ -16832,21 +16827,28 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       var subs_state = this._state;
 
       if (this._state !== 'terminated') {
-        subs_state += ";expires=".concat(this._getExpiresTimestamp());
-      } else if (this.terminated_reason) {
-        subs_state += ";reason=".concat(this.terminated_reason);
+        var expires = Math.floor((this._expires_timestamp - new Date().getTime()) / 1000);
+
+        if (expires < 0) {
+          expires = 0;
+        }
+
+        subs_state += ";expires=".concat(expires);
+      } else if (this._terminated_reason) {
+        subs_state += ";reason=".concat(this._terminated_reason);
       }
 
-      var headers = this.headers.slice();
+      var headers = this._headers.slice();
+
       headers.push("Subscription-State: ".concat(subs_state));
 
       if (body) {
-        headers.push("Content-Type: ".concat(this.content_type));
+        headers.push("Content-Type: ".concat(this._content_type));
       }
 
-      this.params.cseq++;
+      this._params.cseq++;
 
-      this._ua.sendRequest(JsSIP_C.NOTIFY, this.target, this.params, headers, body, this, this.credential);
+      this._ua.sendRequest(JsSIP_C.NOTIFY, this._target, this._params, headers, body, this, this._credential);
     }
     /**
      *  Send the final NOTIFY request
@@ -16861,15 +16863,15 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       var reason = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : null;
       debug('sendFinalNotify()');
 
-      if (this.is_final_notify_sent) {
+      if (this._is_final_notify_sent) {
         return;
       }
 
-      this.is_final_notify_sent = true;
+      this._is_final_notify_sent = true;
 
-      this._dialogTerminated('send final notify');
+      this._dialogTerminated(C.SEND_FINAL_NOTIFY);
 
-      this.terminated_reason = reason;
+      this._terminated_reason = reason;
       this.sendNotify(body);
     }
     /**
@@ -16882,22 +16884,31 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       return this._state;
     }
     /**
+     * Get dialog id
+     */
+
+  }, {
+    key: "id",
+    get: function get() {
+      return this._id;
+    }
+    /**
      * Private API.
      */
 
   }, {
     key: "_dialogTerminated",
     value: function _dialogTerminated(termination_code) {
-      if (this.is_terminated) {
+      if (this._is_terminated) {
         return;
       }
 
-      this.is_terminated = true;
+      this._is_terminated = true;
       this._state = 'terminated';
-      clearTimeout(this.expires_timer);
+      clearTimeout(this._expires_timer);
 
-      if (this.id) {
-        debug('remove dialog id=', this.id);
+      if (this._id) {
+        debug('remove dialog id=', this._id);
 
         this._ua.destroyDialog(this);
       }
@@ -16907,34 +16918,24 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       this.emit('terminated', termination_code, send_final_notify);
     }
   }, {
-    key: "_setExpiresTimestamp",
-    value: function _setExpiresTimestamp() {
-      this.expires_timestamp = new Date().getTime() + this.expires * 1000;
-    }
-  }, {
-    key: "_getExpiresTimestamp",
-    value: function _getExpiresTimestamp() {
-      var delta = Math.floor((this.expires_timestamp - new Date().getTime()) / 1000);
-      return delta >= 0 ? delta : 0;
-    }
-  }, {
     key: "_setExpiresTimer",
     value: function _setExpiresTimer() {
       var _this2 = this;
 
-      clearTimeout(this.expires_timer);
+      this._expires_timestamp = new Date().getTime() + this._expires * 1000;
+      clearTimeout(this._expires_timer);
       setTimeout(function () {
-        if (_this2.is_final_notify_sent) {
+        if (_this2._is_final_notify_sent) {
           return;
         }
 
-        _this2.terminated_reason = 'timeout';
-        _this2.is_final_notify_sent = true;
+        _this2._terminated_reason = 'timeout';
+        _this2._is_final_notify_sent = true;
 
         _this2.sendNotify();
 
         _this2._dialogTerminated(C.SUBSCRIPTION_EXPIRED);
-      }, this.expires * 1000);
+      }, this._expires * 1000);
     }
   }], [{
     key: "C",
@@ -22722,7 +22723,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       throw new TypeError('target is undefined');
     }
 
-    _this.target = target;
+    _this._target = target;
 
     if (!event_name) {
       throw new TypeError('event_name is undefined');
@@ -22734,62 +22735,61 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       throw new TypeError('event_name - wrong format');
     }
 
-    _this.event_name = parsed.event;
-    _this.event_id = parsed.params && parsed.params.id;
+    _this._event_name = parsed.event;
+    _this._event_id = parsed.params && parsed.params.id;
 
     if (!accept) {
       throw new TypeError('accept is undefined');
     }
 
-    _this.accept = accept;
+    _this._accept = accept;
 
     if (!expires) {
       expires = 900;
     }
 
-    _this.expires = expires;
-    _this.allow_events = allow_events; // used to subscribe with body
+    _this._expires = expires;
+    _this._allow_events = allow_events; // used to subscribe with body
 
-    _this.content_type = content_type;
-    _this.is_first_notify_request = true;
-    _this.params = Utils.cloneObject(params);
+    _this._content_type = content_type;
+    _this._is_first_notify_request = true;
+    _this._params = Utils.cloneObject(params);
 
-    if (!_this.params.from_uri) {
-      _this.params.from_uri = _this._ua.configuration.uri;
+    if (!_this._params.from_uri) {
+      _this._params.from_uri = _this._ua.configuration.uri;
     } // set SUBSCRIBE dialog parameters
 
 
-    _this.params.from_tag = Utils.newTag();
-    _this.params.to_tag = null;
-    _this.params.call_id = Utils.createRandomToken(20);
-    _this.params.cseq = Math.floor(Math.random() * 10000 + 1); // Create contact
+    _this._params.from_tag = Utils.newTag();
+    _this._params.to_tag = null;
+    _this._params.call_id = Utils.createRandomToken(20);
+    _this._params.cseq = Math.floor(Math.random() * 10000 + 1); // Create contact
 
-    _this.contact = "<sip:".concat(_this.params.from_uri.user, "@").concat(Utils.createRandomToken(12), ".invalid;transport=ws>");
-    _this.contact += ";+sip.instance=\"<urn:uuid:".concat(_this._ua.configuration.instance_id, ">\""); // Optional, used if credential is different from REGISTER/INVITE
+    _this._contact = "<sip:".concat(_this._params.from_uri.user, "@").concat(Utils.createRandomToken(12), ".invalid;transport=ws>");
+    _this._contact += ";+sip.instance=\"<urn:uuid:".concat(_this._ua.configuration.instance_id, ">\""); // Optional, used if credential is different from REGISTER/INVITE
 
-    _this.credential = credential; // Dialog state: init, notify_wait, pending, active, terminated
+    _this._credential = credential; // Dialog state: init, notify_wait, pending, active, terminated
 
     _this._state = 'init'; // Dialog id 
 
-    _this.id = null; // To refresh subscription
+    _this._id = null; // To refresh subscription
 
-    _this.expires_timer = null;
-    _this.expires_timestamp = null;
-    _this.headers = Utils.cloneArray(headers);
-    var event_value = _this.event_name;
+    _this._expires_timer = null;
+    _this._expires_timestamp = null;
+    _this._headers = Utils.cloneArray(headers);
+    var event_value = _this._event_name;
 
-    if (_this.event_id) {
-      event_value += ";id=".concat(_this.event_id);
+    if (_this._event_id) {
+      event_value += ";id=".concat(_this._event_id);
     }
 
-    _this.headers = _this.headers.concat(["Event: ".concat(event_value), "Expires: ".concat(_this.expires), "Accept: ".concat(_this.accept), "Contact: ".concat(_this.contact)]);
+    _this._headers = _this._headers.concat(["Event: ".concat(event_value), "Expires: ".concat(_this._expires), "Accept: ".concat(_this._accept), "Contact: ".concat(_this._contact)]);
 
-    if (_this.allow_events) {
-      _this.headers.push("Allow-Events: ".concat(_this.allow_events));
+    if (_this._allow_events) {
+      _this._headers.push("Allow-Events: ".concat(_this._allow_events));
     }
 
-    _this.is_terminated = false;
-    _this.route_set = null; // Custom session empty object for high level use.    
+    _this._is_terminated = false; // Custom session empty object for high level use.    
 
     _this.data = {};
     return _this;
@@ -22807,7 +22807,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
   }, {
     key: "onAuthenticated",
     value: function onAuthenticated() {
-      this.params.cseq++;
+      this._params.cseq++;
     }
   }, {
     key: "onRequestTimeout",
@@ -22823,31 +22823,33 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     key: "onReceiveResponse",
     value: function onReceiveResponse(response) {
       if (response.status_code >= 200 && response.status_code < 300) {
-        if (this.params.to_tag === null) {
-          this.params.to_tag = response.to_tag;
-          this.id = "".concat(this.params.call_id).concat(this.params.from_tag).concat(this.params.to_tag);
-          debug('added dialog id=', this.id);
+        if (this._params.to_tag === null) {
+          this._params.to_tag = response.to_tag;
+          this._id = "".concat(this._params.call_id).concat(this._params.from_tag).concat(this._params.to_tag);
+          debug('added dialog id=', this._id);
 
           this._ua.newDialog(this);
 
-          this.route_set = response.getHeaders('record-route').reverse();
+          var route_set = response.getHeaders('record-route').reverse();
 
-          if (this.route_set.length > 0) {
-            this.params.route_set = this.route_set;
+          if (route_set.length > 0) {
+            this._params.route_set = route_set;
           }
         }
 
-        var expires = this._getExpires(response);
+        var expires_value = response.getHeader('expires');
 
-        if (expires === -1) {
-          debugerror('response without Expires header');
-          return;
+        if (!expires_value) {
+          debugerror('response without Expires header'); // RFC 6665 3.1.1 SUBSCRIBE OK must contain Expires header
+          // Use workaround expires value.
+
+          expires_value = '900';
         }
 
-        if (expires > 0) {
-          this.expires_timestamp = new Date().getTime() + expires * 1000;
+        var expires = parseInt(expires_value);
 
-          this._scheduleSubscribe(this._calculateTimeoutMs(expires));
+        if (expires > 0) {
+          this._scheduleSubscribe(expires);
         }
       } else if (response.status_code === 401 || response.status_code === 407) {
         this._dialogTerminated(C.SUBSCRIBE_FAILED_AUTHENTICATION);
@@ -22883,7 +22885,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       var event_name = event_header.event;
       var event_id = event_header.params && event_header.params.id;
 
-      if (event_name !== this.event_name || event_id !== this.event_id) {
+      if (event_name !== this._event_name || event_id !== this._event_id) {
         debugerror('Event header does not match SUBSCRIBE');
         request.reply(489);
 
@@ -22906,8 +22908,8 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
       request.reply(200);
 
-      if (this.is_first_notify_request) {
-        this.is_first_notify_request = false; // TODO: see RFC 6665 4.4.1. If route_set should be updated here ?
+      if (this._is_first_notify_request) {
+        this._is_first_notify_request = false; // TODO: see RFC 6665 4.4.1. If route_set should be updated here ?
       }
 
       var new_state = subs_state.state.toLowerCase();
@@ -22921,12 +22923,10 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
           var expires_timestamp = new Date().getTime() + expires * 1000;
           var max_time_deviation = 2000; // expiration time is shorter and the difference is not too small
 
-          if (this.expires_timestamp - expires_timestamp > max_time_deviation) {
+          if (this._expires_timestamp - expires_timestamp > max_time_deviation) {
             debug('update sending re-SUBSCRIBE time');
-            clearTimeout(this.expires_timer);
-            this.expires_timestamp = expires_timestamp;
 
-            this._scheduleSubscribe(this._calculateTimeoutMs(expires));
+            this._scheduleSubscribe(expires);
           }
         }
       }
@@ -22968,14 +22968,14 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
         this._state = 'notify_wait';
       }
 
-      var headers = this.headers.slice();
+      var headers = this._headers.slice();
 
       if (body) {
-        if (!this.content_type) {
+        if (!this._content_type) {
           throw new TypeError('content_type is undefined');
         }
 
-        headers.push("Content-Type: ".concat(this.content_type));
+        headers.push("Content-Type: ".concat(this._content_type));
       }
 
       this._send(body, headers);
@@ -22991,7 +22991,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       var body = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : null;
       debug('unsubscribe()'); // Set header Expires: 0
 
-      var headers = this.headers.map(function (s) {
+      var headers = this._headers.map(function (s) {
         return s.startsWith('Expires') ? 'Expires: 0' : s;
       });
 
@@ -23009,6 +23009,15 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       return this._state;
     }
     /**
+     * Get dialog id
+     */
+
+  }, {
+    key: "id",
+    get: function get() {
+      return this._id;
+    }
+    /**
      * Private API.
      */
 
@@ -23018,15 +23027,15 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       var _this2 = this;
 
       // to prevent duplicate emit terminated
-      if (this.is_terminated) {
+      if (this._is_terminated) {
         return;
       }
 
-      this.is_terminated = true;
+      this._is_terminated = true;
       this._state = 'terminated';
-      clearTimeout(this.expires_timer); // remove dialog with some delay to receiving possible final NOTIFY
+      clearTimeout(this._expires_timer); // remove dialog with some delay to receiving possible final NOTIFY
 
-      if (this.id) {
+      if (this._id) {
         setTimeout(function () {
           debug('removed dialog id=', _this2.id);
 
@@ -23040,31 +23049,23 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
   }, {
     key: "_send",
     value: function _send(body, headers) {
-      this.params.cseq++;
+      this._params.cseq++;
 
-      this._ua.sendRequest(JsSIP_C.SUBSCRIBE, this.target, this.params, headers, body, this, this.credential);
-    }
-  }, {
-    key: "_getExpires",
-    value: function _getExpires(r) {
-      var e = r.getHeader('expires');
-      return e ? parseInt(e) : -1;
-    }
-  }, {
-    key: "_calculateTimeoutMs",
-    value: function _calculateTimeoutMs(expires) {
-      return expires >= 140 ? expires * 1000 / 2 + Math.floor((expires / 2 - 70) * 1000 * Math.random()) : expires * 1000 - 5000;
+      this._ua.sendRequest(JsSIP_C.SUBSCRIBE, this._target, this._params, headers, body, this, this._credential);
     }
   }, {
     key: "_scheduleSubscribe",
-    value: function _scheduleSubscribe(timeout) {
+    value: function _scheduleSubscribe(expires) {
       var _this3 = this;
 
+      var timeout = expires >= 140 ? expires * 1000 / 2 + Math.floor((expires / 2 - 70) * 1000 * Math.random()) : expires * 1000 - 5000;
+      this._expires_timestamp = new Date().getTime() + expires * 1000;
       debug("next SUBSCRIBE will be sent in ".concat(Math.floor(timeout / 1000), " sec"));
-      this.expires_timer = setTimeout(function () {
-        _this3.expires_timer = undefined;
+      clearTimeout(this._expires_timer);
+      this._expires_timer = setTimeout(function () {
+        _this3._expires_timer = null;
 
-        _this3._send(null, _this3.headers);
+        _this3._send(null, _this3._headers);
       }, timeout);
     }
   }], [{
