@@ -295,9 +295,9 @@ function guiSendInitSubscribe() {
         The NOTIFY can with or without body.
         If NOTIFY Subscription-State: terminated - the argument isTerminated = true 
     */
-    subscriber.on('notify', (isFinal, notify, body, contentType) => { // with not empty body
-        console.log(`>> receive ${isFinal ? 'final ' : ''}NOTIFY`, notify, body, contentType);
-        guiInfo(`receive ${isFinal ? 'final ' : ''}notify`);
+    subscriber.on('notify', (is_final, notify, body, content_type) => { // with not empty body
+        console.log(`>> receive ${is_final ? 'final ' : ''}NOTIFY`, notify, body, content_type);
+        guiInfo(`receive ${is_final ? 'final ' : ''}notify`);
     });
 
     /**
@@ -312,7 +312,13 @@ function guiSendInitSubscribe() {
         guiSubscribeButtons();
     });
 
-    subscriber.subscribe();
+    if( expires > 0 ){
+      // normal subscribe
+      subscriber.subscribe();
+    } else {
+      // fetch SUBSCRIBE (with expires: 0), see RFC 6665 4.4.3
+      subscriber.unsubscribe();
+    }
     guiSubscribeButtons();
 }
 
@@ -357,6 +363,7 @@ function guiSendUnsubscribe() {
 function createNotifier(subscribe) {
     const ourContentType = 'text/plain';
     let pending = true; // server dialog can be created in 'active' or 'pending' state
+
     notifier = jssipUA.notifier({ subscribe, content_type: ourContentType, pending });
 
     notifier.on('subscribe', (isUnsubscribe, subscribe, body, contentType) => {
@@ -383,7 +390,8 @@ function createNotifier(subscribe) {
         guiSubscribeButtons();
     });
 
-    notifier.sendNotify();  // Send 1st NOTIFY immediately. Can be with or without body.
+    console.log('send 1st notify');
+    notifier.sendNotify('1st notify');  // Send 1st NOTIFY immediately. Can be with or without body.
     guiSubscribeButtons();
 }
 

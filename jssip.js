@@ -16703,21 +16703,31 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       to_tag: subscribe.from_tag,
       call_id: subscribe.call_id,
       cseq: Math.floor(Math.random() * 10000 + 1)
-    }; // Dialog id
+    }; // For non-fetch subscribe add dialog
 
-    _this._id = "".concat(_this._params.call_id).concat(_this._params.from_tag).concat(_this._params.to_tag);
-    debug('add dialog id=', _this._id);
+    if (_this._expires > 0) {
+      // Dialog id
+      _this._id = "".concat(_this._params.call_id).concat(_this._params.from_tag).concat(_this._params.to_tag);
+      debug('add dialog id=', _this._id);
 
-    _this._ua.newDialog(_assertThisInitialized(_this)); // Set expires timer and timestamp
+      _this._ua.newDialog(_assertThisInitialized(_this)); // Set expires timer and timestamp
 
 
-    _this._setExpiresTimer();
+      _this._setExpiresTimer();
+    }
 
     _this._is_terminated = false;
     _this._terminated_reason = undefined; // Custom session empty object for high level use.
 
     _this.data = {};
-    subscribe.reply(200, null, ["Expires: ".concat(_this._expires), "Contact: ".concat(_this._contact)]);
+    subscribe.reply(200, null, ["Expires: ".concat(_this._expires), "Contact: ".concat(_this._contact)]); // RFC 6665 4.4.3: fetch subscribe
+
+    if (_this._expires === 0) {
+      debug('fetch subscribe');
+
+      _this._dialogTerminated(C.RECEIVE_UNSUBSCRIBE);
+    }
+
     return _this;
   }
   /**
@@ -16823,7 +16833,13 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     key: "sendNotify",
     value: function sendNotify() {
       var body = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : null;
-      debug('sendNotify()');
+      debug('sendNotify()'); // Prevent send notify after final notify
+
+      if (this._is_final_notify_sent) {
+        debugerror('final notify has sent');
+        return;
+      }
+
       var subs_state = this._state;
 
       if (this._state !== 'terminated') {
@@ -16862,11 +16878,6 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       var body = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : null;
       var reason = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : null;
       debug('sendFinalNotify()');
-
-      if (this._is_final_notify_sent) {
-        return;
-      }
-
       this._is_final_notify_sent = true;
 
       this._dialogTerminated(C.SEND_FINAL_NOTIFY);
@@ -22744,7 +22755,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
     _this._accept = accept;
 
-    if (!expires) {
+    if (expires !== 0 && !expires) {
       expires = 900;
     }
 
@@ -22827,6 +22838,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     key: "onReceiveResponse",
     value: function onReceiveResponse(response) {
       if (response.status_code >= 200 && response.status_code < 300) {
+        // add dialog to stack dialogs table
         if (this._params.to_tag === null) {
           this._params.to_tag = response.to_tag;
           this._id = "".concat(this._params.call_id).concat(this._params.from_tag).concat(this._params.to_tag);
@@ -22839,11 +22851,12 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
           if (route_set.length > 0) {
             this._params.route_set = route_set;
           }
-        }
+        } // check expires value
+
 
         var expires_value = response.getHeader('expires');
 
-        if (!expires_value) {
+        if (expires_value !== 0 && !expires_value) {
           debugerror('response without Expires header'); // RFC 6665 3.1.1 SUBSCRIBE OK must contain Expires header
           // Use workaround expires value.
 
@@ -22985,7 +22998,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       this._send(body, headers);
     }
     /** 
-     * Send un-SUBSCRIBE
+     * Send un-SUBSCRIBE (or fetch-SUBSCRIBE if in constructor set expires=0)
      * -param {String} body. Optional.
      */
 
