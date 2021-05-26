@@ -1,6 +1,6 @@
 
 /*
-  SUBSCRIBE test
+  SUBSCRIBE/NOTIFY JsSIP test
  */
 let server;
 let account;
@@ -8,16 +8,15 @@ let jssipUA;
 let subscriber = null;
 let notifier = null;
 
-
 // Run when document is ready
 function main() {
     server = guiLoadServerConfig({ domain: '', addresses: '' });
     account = guiLoadAccount({ user: '', password: '', displayName: '', authUser: '' });
-    guiInit();
+    init();
     guiShowPanel('main_panel');
 }
 
-function guiInit() {
+function init() {
     document.getElementById('setting_btn').onclick = () => { guiShowPanel('setting_panel'); }
     document.getElementById('subscribe_test_btn').onclick = guiSubscribeTest;
 
@@ -131,6 +130,7 @@ function guiShowPanel(activePanel) {
     }
 }
 
+//----------------- JsSIP init ------------------------
 function stackInit() {
     let sockets = [];
     for (let address of server.addresses) {
@@ -191,6 +191,7 @@ function stackInit() {
     jssipUA.start();
 }
 
+//--------- incoming SUBSCRIBE. Accept or reject ?  ----------
 function incomingSubscribe(subscribe, eventName, accepts) {
     // Check incoming SUBSCRIBE
     const ourEventName = 'test';
@@ -216,7 +217,7 @@ function incomingSubscribe(subscribe, eventName, accepts) {
     }
 }
 
-//--------------- Subscribe GUI -------------------------------
+//--------------- Subscribe test panel -------------------------------
 function guiSubscribeTest() {
     guiInfo('');
     guiShowPanel('subscribe_panel');
@@ -231,7 +232,9 @@ function guiSubscribeButtons() {
     document.getElementById('send_final_notify_btn').disabled = !notifier;
 }
 
-//------------ subscriber (client subscribe dialog)  ----------------------
+//-------------------------------------------------------------------------
+//--------------- subscriber (client subscribe dialog)  -------------------
+//-------------------------------------------------------------------------
 function guiSendInitSubscribe() {
     let sendToUser = document.querySelector('#send_subscribe_form [name=user]').value.trim();
     let eventName = document.querySelector('#send_subscribe_form [name=event_name]').value.trim();
@@ -246,33 +249,34 @@ function guiSendInitSubscribe() {
 
     let params = null;
     /*
-    params is optional.
-    Used if domain or from-user is different from used in REGISTER/INVITE
+      params is optional.
+      Used if domain or from-user is different from used in REGISTER/INVITE
   
-    let params = {
-      to_uri: new JsSIP.URI('sip', target, server.domain),
-      to_display_name: null,
-      from_uri: new JsSIP.URI('sip', account.user, server.domain),
-      from_display_name: null,
-    }
+      let params = {
+          to_uri: new JsSIP.URI('sip', target, server.domain),
+          to_display_name: null,
+          from_uri: new JsSIP.URI('sip', account.user, server.domain),
+          from_display_name: null,
+      }
     */
 
     let credential = null;
     /* 
      credential is optional.
-     Used if authentication is different from REGISTER/INVITE
-    let credential = {
-        authorization_user: phone.account.authUser ? phone.account.authUser : phone.account.user,
-        password: phone.account.password
-    };
+     Used if authorization is different from REGISTER/INVITE
+
+     let credential = {
+         authorization_user: phone.account.authUser ? phone.account.authUser : phone.account.user,
+         password: phone.account.password
+     };
     */
 
     try {
         subscriber = jssipUA.subscriber(target, {
-            event_name: eventName, // event name with optional ;id=xxx
-            accept: 'application/pidf+xml,text/json,text/plain',
-            expires: expires,
-            content_type: 'text/plain',
+            event_name: eventName,          // event name with optional ;id=xxx
+            accept: 'text/json,text/plain', // We understand NOTIFY with the Content-Type
+            expires: expires,               // Subscription expires. E.g. 3600
+            content_type: 'text/plain',     // Content-Type of SUBSCRIBE requests.
             params: params,
             credential: credential,
         });
@@ -281,19 +285,43 @@ function guiSendInitSubscribe() {
         guiError('Cannot create client dialog');
     }
 
+    // After receiving NOTIFY with Subscription-State: active
     subscriber.on('active', () => {
-        console.log('>> client dialog is active');
-        guiInfo('client dialog: active');
+        console.log('>> subscriber is active');
+        guiInfo('subscriber: active');
     });
+
+    /** Incoming NOTIFY event
+     
+     The NOTIFY can with or without body.
+     If NOTIFY Subscription-State: terminated - the argument isTerminated = true 
+
+      Note: 
+        After send unsubsribe subscriber state set to 'terminated'
+        and shortly after this will be received final NOTIFY.
+
+        Time to receive NOTIFY after termination is limited -
+        subscriber dialog id will be removed in 31 seconds after termination.
+        
+        (Other possibility - wait final NOTIFY, and set terminated state after receive.
+        There can be problem: if server does not send final NOTIFY.
+        Currently it is not implemented.)
+
+    */
     subscriber.on('notify', (isTerminated, notify, body, contentType) => { // with not empty body
         console.log(`>> receive ${isTerminated ? 'terminate-' : ''}NOTIFY`, notify, body, contentType);
-        guiInfo('receive NOTIFY');
+        guiInfo(`receive ${isTerminated ? 'final ' : ''}notify`);
     });
+
+    /**
+     * subscriber dialog terminated. 
+     * See  subscriberTerminationText with list of reasons.
+     */
     subscriber.on('terminated', (terminationCode) => {
         let terminationText = subscriberTerminationText(subscriber, terminationCode);
-        console.log(`>> client dialog: terminated (${terminationText})`);
-        guiWarning(`client dialog: terminated (${terminationText})`);
-        subscriber = null;
+        console.log(`subscriber>>: terminated (${terminationText})`);
+        guiWarning(`subscriber: terminated (${terminationText})`);
+        subscriber = null; 
         guiSubscribeButtons();
     });
 
@@ -301,20 +329,21 @@ function guiSendInitSubscribe() {
     guiSubscribeButtons();
 }
 
+// Convert termination code to English message.
 function subscriberTerminationText(subscriber, terminationCode) {
     switch (terminationCode) {
-        case subscriber.C.SUBSCRIBE_RESPONSE_TIMEOUT: return 'SUBSCRIBE response timeout';
-        case subscriber.C.SUBSCRIBE_TRANSPORT_ERROR: return 'SUBSCRIBE transport error';
-        case subscriber.C.SUBSCRIBE_NON_OK_RESPONSE: return 'SUBSCRIBE non-OK response';
-        case subscriber.C.SUBSCRIBE_FAILED_AUTHENTICATION: return 'SUBSCRIBE failed authentication';
-        case subscriber.C.SEND_UNSUBSCRIBE: return 'Send un-UNSUBSCRIBE';
-        case subscriber.C.RECEIVE_FINAL_NOTIFY: return 'Receive final NOTIFY';
-        case subscriber.C.RECEIVE_BAD_NOTIFY: return 'Receive bad NOTIFY';
-
-        default: return 'unknown termination code';
+        case subscriber.C.SUBSCRIBE_RESPONSE_TIMEOUT: return 'subscribe response timeout';
+        case subscriber.C.SUBSCRIBE_TRANSPORT_ERROR: return 'subscribe transport error';
+        case subscriber.C.SUBSCRIBE_NON_OK_RESPONSE: return 'subscribe non-OK response';
+        case subscriber.C.SUBSCRIBE_FAILED_AUTHENTICATION: return 'subscribe failed authentication';
+        case subscriber.C.SEND_UNSUBSCRIBE: return 'send un-unsubscribe';
+        case subscriber.C.RECEIVE_FINAL_NOTIFY: return 'receive final notify';
+        case subscriber.C.RECEIVE_BAD_NOTIFY: return 'receive bad notify';
+        default: return 'unknown termination code: ' + terminationCode;
     }
 }
 
+// Send next SUBSCRIBE (after initial)
 function guiSendNextSubscribe() {
     if (subscriber === null || subscriber.state === 'terminated') {
         guiWarning('No client subscribe dialog');
@@ -323,6 +352,7 @@ function guiSendNextSubscribe() {
     subscriber.subscribe('Next subscribe');
 }
 
+// Send unSubscribe (SUBSCRIBE with expires: 0)
 function guiSendUnsubscribe() {
     if (subscriber === null || subscriber.state === 'terminated') {
         guiWarning('No client subscribe dialog');
@@ -331,7 +361,12 @@ function guiSendUnsubscribe() {
     subscriber.unsubscribe();
 }
 
+//-----------------------------------------------------------------------
 //------------ notifier (server subscribe dialog)  ----------------------
+//-----------------------------------------------------------------------
+// In clients, it is used less often than subscriber
+// In this test, it is used to debug the subscriber
+
 function createNotifier(subscribe) {
     const ourContentType = 'text/plain';
     let pending = true; // server dialog can be created in 'active' or 'pending' state
@@ -339,7 +374,7 @@ function createNotifier(subscribe) {
 
     notifier.on('subscribe', (isUnsubscribe, subscribe, body, contentType) => {
         console.log(`server dialog>> receive ${isUnsubscribe ? 'un-' : ''}SUBSCRIBE`, subscribe, body, contentType, isUnsubscribe);
-        guiInfo('receive SUBSCRIBE');
+        guiInfo('receive subscribe');
         if (!isUnsubscribe) {
             if (notifier.state === 'pending') {
                 notifier.sendNotify('Dialog state is pending. Do not provide system state');
@@ -348,9 +383,10 @@ function createNotifier(subscribe) {
             }
         }
     });
+
     notifier.on('terminated', (terminationCode, sendFinalNotify) => {
         let terminationText = notifierTerminationText(notifier, terminationCode);
-        guiWarning(`server dialog>> terminated (${terminationText})`);
+        guiWarning(`notifier>> terminated (${terminationText})`);
         if (sendFinalNotify) {
             notifier.sendFinalNotify('Final notify. Provide current system state (if was)');
         }
@@ -364,14 +400,14 @@ function createNotifier(subscribe) {
 
 function notifierTerminationText(notifier, terminationCode) {
     switch (terminationCode) {
-        case notifier.C.NOTIFY_RESPONSE_TIMEOUT: return 'NOTIFY response timeout';
-        case notifier.C.NOTIFY_TRANSPORT_ERROR: return 'NOTIFY transport error';
-        case notifier.C.NOTIFY_NON_OK_RESPONSE: return 'NOTIFY non-OK response';
-        case notifier.C.NOTIFY_FAILED_AUTHENTICATION: return 'NOTIFY failed authentication';
-        case notifier.C.SEND_FINAL_NOTIFY: return 'Send final NOTIFY';
-        case notifier.C.RECEIVE_UNSUBSCRIBE: return 'Receive un-SUBSCRIBE';
-        case notifier.C.SUBSCRIPTION_EXPIRED: return 'Subscription expired';
-        default: return 'unknown termination code';
+        case notifier.C.NOTIFY_RESPONSE_TIMEOUT: return 'notify response timeout';
+        case notifier.C.NOTIFY_TRANSPORT_ERROR: return 'notify transport error';
+        case notifier.C.NOTIFY_NON_OK_RESPONSE: return 'notify non-OK response';
+        case notifier.C.NOTIFY_FAILED_AUTHENTICATION: return 'notify failed authentication';
+        case notifier.C.SEND_FINAL_NOTIFY: return 'send final notify';
+        case notifier.C.RECEIVE_UNSUBSCRIBE: return 'receive un-subscribe';
+        case notifier.C.SUBSCRIPTION_EXPIRED: return 'subscription expired';
+        default: return 'unknown termination code: ' + terminationCode;
     }
 }
 
