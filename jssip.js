@@ -22674,7 +22674,7 @@ var C = {
   SUBSCRIBE_TRANSPORT_ERROR: 1,
   SUBSCRIBE_NON_OK_RESPONSE: 2,
   SUBSCRIBE_FAILED_AUTHENTICATION: 3,
-  SEND_UNSUBSCRIBE: 4,
+  UNSUBSCRIBE_TIMEOUT: 4,
   RECEIVE_FINAL_NOTIFY: 5,
   RECEIVE_BAD_NOTIFY: 6
 };
@@ -22775,7 +22775,11 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     _this._id = null; // To refresh subscription
 
     _this._expires_timer = null;
-    _this._expires_timestamp = null;
+    _this._expires_timestamp = null; // To prvent duplicate un-SUBSCRIBE sending.
+
+    _this._send_unsubscribe = false; // After send un-subscribe wait final NOTIFY limited time.
+
+    _this._unsubscribe_timeout_timer = null;
     _this._headers = Utils.cloneArray(headers);
     var event_value = _this._event_name;
 
@@ -22988,16 +22992,29 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
   }, {
     key: "unsubscribe",
     value: function unsubscribe() {
+      var _this2 = this;
+
       var body = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : null;
-      debug('unsubscribe()'); // Set header Expires: 0
+      debug('unsubscribe()'); // Prevent duplication unsubscribe.
+
+      if (this._send_unsubscribe) {
+        debugerror('unsubscribe has already been sent');
+        return;
+      }
+
+      this._send_unsubscribe = true; // Set header Expires: 0
 
       var headers = this._headers.map(function (s) {
         return s.startsWith('Expires') ? 'Expires: 0' : s;
       });
 
-      this._send(body, headers);
+      this._send(body, headers); // Waiting for the final notify for a while
 
-      this._dialogTerminated(C.SEND_UNSUBSCRIBE);
+
+      var final_notify_timeout = 30000;
+      this._unsubscribe_timeout_timer = setTimeout(function () {
+        _this2._dialogTerminated(C.UNSUBSCRIBE_TIMEOUT);
+      }, final_notify_timeout);
     }
     /**
      * Get dialog state
@@ -23024,23 +23041,21 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
   }, {
     key: "_dialogTerminated",
     value: function _dialogTerminated(termination_code) {
-      var _this2 = this;
-
       // to prevent duplicate emit terminated
       if (this._is_terminated) {
         return;
       }
 
       this._is_terminated = true;
-      this._state = 'terminated';
-      clearTimeout(this._expires_timer); // remove dialog with some delay to receiving possible final NOTIFY
+      this._state = 'terminated'; // clear timers
+
+      clearTimeout(this._expires_timer);
+      clearTimeout(this._unsubscribe_timeout_timer);
 
       if (this._id) {
-        setTimeout(function () {
-          debug('removed dialog id=', _this2.id);
+        debug('removed dialog id=', this.id);
 
-          _this2._ua.destroyDialog(_this2);
-        }, 32000);
+        this._ua.destroyDialog(this);
       }
 
       debug("emit \"terminated\" termination code=".concat(termination_code, "\""));

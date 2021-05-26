@@ -292,25 +292,12 @@ function guiSendInitSubscribe() {
     });
 
     /** Incoming NOTIFY event
-     
-     The NOTIFY can with or without body.
-     If NOTIFY Subscription-State: terminated - the argument isTerminated = true 
-
-      Note: 
-        After send unsubsribe subscriber state set to 'terminated'
-        and shortly after this will be received final NOTIFY.
-
-        Time to receive NOTIFY after termination is limited -
-        subscriber dialog id will be removed in 31 seconds after termination.
-        
-        (Other possibility - wait final NOTIFY, and set terminated state after receive.
-        There can be problem: if server does not send final NOTIFY.
-        Currently it is not implemented.)
-
+        The NOTIFY can with or without body.
+        If NOTIFY Subscription-State: terminated - the argument isTerminated = true 
     */
-    subscriber.on('notify', (isTerminated, notify, body, contentType) => { // with not empty body
-        console.log(`>> receive ${isTerminated ? 'terminate-' : ''}NOTIFY`, notify, body, contentType);
-        guiInfo(`receive ${isTerminated ? 'final ' : ''}notify`);
+    subscriber.on('notify', (isFinal, notify, body, contentType) => { // with not empty body
+        console.log(`>> receive ${isFinal ? 'final ' : ''}NOTIFY`, notify, body, contentType);
+        guiInfo(`receive ${isFinal ? 'final ' : ''}notify`);
     });
 
     /**
@@ -321,7 +308,7 @@ function guiSendInitSubscribe() {
         let terminationText = subscriberTerminationText(subscriber, terminationCode);
         console.log(`subscriber>>: terminated (${terminationText})`);
         guiWarning(`subscriber: terminated (${terminationText})`);
-        subscriber = null; 
+        subscriber = null;
         guiSubscribeButtons();
     });
 
@@ -336,7 +323,7 @@ function subscriberTerminationText(subscriber, terminationCode) {
         case subscriber.C.SUBSCRIBE_TRANSPORT_ERROR: return 'subscribe transport error';
         case subscriber.C.SUBSCRIBE_NON_OK_RESPONSE: return 'subscribe non-OK response';
         case subscriber.C.SUBSCRIBE_FAILED_AUTHENTICATION: return 'subscribe failed authentication';
-        case subscriber.C.SEND_UNSUBSCRIBE: return 'send un-unsubscribe';
+        case subscriber.C.UNSUBSCRIBE_TIMEOUT: return 'un-unsubscribe timeout';
         case subscriber.C.RECEIVE_FINAL_NOTIFY: return 'receive final notify';
         case subscriber.C.RECEIVE_BAD_NOTIFY: return 'receive bad notify';
         default: return 'unknown termination code: ' + terminationCode;
@@ -387,7 +374,9 @@ function createNotifier(subscribe) {
     notifier.on('terminated', (terminationCode, sendFinalNotify) => {
         let terminationText = notifierTerminationText(notifier, terminationCode);
         guiWarning(`notifier>> terminated (${terminationText})`);
+        // You must send final NOTIFY after termination (with or without body)
         if (sendFinalNotify) {
+            // to test subscriber unsubscribe timeout comment next line
             notifier.sendFinalNotify('Final notify. Provide current system state (if was)');
         }
         notifier = null;
