@@ -263,7 +263,7 @@ function guiSendInitSubscribe() {
     let credential = null;
     /* 
      credential is optional.
-     Used if authorization is different from REGISTER/INVITE
+     Used if authentication is different from REGISTER/INVITE
 
      let credential = {
          authorization_user: phone.account.authUser ? phone.account.authUser : phone.account.user,
@@ -285,14 +285,16 @@ function guiSendInitSubscribe() {
         guiError('Cannot create subscriber');
     }
 
-    // After receiving NOTIFY with Subscription-State: active
+    /** 
+     * 1st NOTIFY with Subscription-State: active
+     */
     subscriber.on('active', () => {
         console.log('>> subscriber is active');
         guiInfo('subscriber: active');
     });
 
-    /** Incoming NOTIFY event
-        The NOTIFY can with or without body.
+    /** 
+        Incoming NOTIFY with body 
         If NOTIFY Subscription-State: terminated - the argument isTerminated = true 
     */
     subscriber.on('notify', (isFinal, notify, body, contentType) => { // with not empty body
@@ -305,7 +307,8 @@ function guiSendInitSubscribe() {
      * 
      * termination code converted to English text.
      * 
-     * For code RECEIVE_FINAL_NOTIFY can be set optional SubscriptionState header parameters:
+     * For terminationCode==RECEIVE_FINAL_NOTIFY 
+     * can be set optional SubscriptionState header parameters:
      *  reason  (undefined or string)
      *  retryAfter (undefined or number)
      */
@@ -370,7 +373,7 @@ function guiSendUnsubscribe() {
 
 function createNotifier(subscribe) {
     const ourContentType = 'text/plain';
-    let pending = true; // server dialog can be created in 'active' or 'pending' state
+    let pending = true; // notifier can be created in 'active' or 'pending' state
 
     // to test fetch 
     const isFetchSubscribe = subscribe.getHeader('expires') === '0';
@@ -385,19 +388,18 @@ function createNotifier(subscribe) {
             notifier.sendFinalNotify(`Provide current system state (final notify)${isFetchSubscribe ? ' (fetch subscribe)' : ''}`);
         } else {
             if (notifier.state === 'pending') {
-                notifier.sendNotify('Dialog state is pending. Do not provide system state');
+                notifier.sendNotify('State is pending. Do not provide system state');
             } else {
                 notifier.sendNotify('Provide current system state');
             }
         }
-        guiShowButtons();
     });
 
     notifier.on('terminated', (terminationCode, sendFinalNotify) => {
         let terminationText = notifierTerminationText(notifier, terminationCode);
         guiWarning(`notifier>> terminated (${terminationText})`);
-        // You must send final NOTIFY after termination (with or without body)
-        // (setFinalNotify=true for subscription timeout)
+        // sendFinalNotify=true for subscription timeout case
+        // you have to send final NOTIFY in the case (with or without body)
         if (sendFinalNotify) {
             notifier.sendFinalNotify('Final notify. Provide current system state (if was)');
         }
@@ -406,6 +408,7 @@ function createNotifier(subscribe) {
     });
 
     notifier.start();
+    guiShowButtons();
 }
 
 function notifierTerminationText(notifier, terminationCode) {
@@ -423,7 +426,7 @@ function notifierTerminationText(notifier, terminationCode) {
 
 function guiSendNotify() {
     if (notifier === null || notifier.state === 'terminated') {
-        guiWarning('No server subscribe dialog');
+        guiWarning('No notifier');
         return;
     }
     // Switch state from pending to active.
@@ -436,7 +439,7 @@ function guiSendNotify() {
 
 function guiSendFinalNotify() {
     if (notifier === null || notifier.state === 'terminated') {
-        guiWarning('No server subscribe dialog');
+        guiWarning('No notifier');
         return;
     }
     // final notify
