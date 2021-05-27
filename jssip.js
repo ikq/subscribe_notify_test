@@ -16666,6 +16666,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     debug('new');
     _this = _super.call(this);
     _this._ua = ua;
+    _this._initial_subscribe = subscribe;
     _this._expires_timestamp = null;
     _this._expires_timer = null;
     _this._state = pending ? 'pending' : 'active';
@@ -16720,14 +16721,6 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     _this._terminated_reason = undefined; // Custom session empty object for high level use.
 
     _this.data = {};
-    subscribe.reply(200, null, ["Expires: ".concat(_this._expires), "Contact: ".concat(_this._contact)]); // RFC 6665 4.4.3: fetch subscribe
-
-    if (_this._expires === 0) {
-      debug('fetch subscribe');
-
-      _this._dialogTerminated(C.RECEIVE_UNSUBSCRIBE);
-    }
-
     return _this;
   }
   /**
@@ -16774,7 +16767,9 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       }
     }
     /**
-     * Dialog callback
+     * Dialog callback.
+     * Called also for initial subscribe 
+     * Supported RFC 6665 4.4.3: initial fetch subscribe (with expires: 0) 
      */
 
   }, {
@@ -16811,6 +16806,17 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
      * User API
      */
 
+    /**
+     * The called after constructor and event settings.
+     * To use events 'subscribe' and 'terminated' for initial subscribe
+     */
+
+  }, {
+    key: "start",
+    value: function start() {
+      debug('start()');
+      this.receiveRequest(this._initial_subscribe);
+    }
     /**
      * Switch pending dialog state to active
      */
@@ -16878,12 +16884,12 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       var body = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : null;
       var reason = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : null;
       debug('sendFinalNotify()');
+      this._state = 'terminated';
+      this._terminated_reason = reason;
+      this.sendNotify(body);
       this._is_final_notify_sent = true;
 
       this._dialogTerminated(C.SEND_FINAL_NOTIFY);
-
-      this._terminated_reason = reason;
-      this.sendNotify(body);
     }
     /**
      * Get dialog state 
@@ -16924,7 +16930,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
         this._ua.destroyDialog(this);
       }
 
-      var send_final_notify = termination_code === C.RECEIVE_UNSUBSCRIBE || termination_code === C.SUBSCRIPTION_EXPIRED;
+      var send_final_notify = termination_code === C.SUBSCRIPTION_EXPIRED;
       debug("emit \"terminated\" termination code=".concat(termination_code, ", send final notify=").concat(send_final_notify));
       this.emit('terminated', termination_code, send_final_notify);
     }

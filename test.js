@@ -221,10 +221,10 @@ function incomingSubscribe(subscribe, eventName, accepts) {
 function guiSubscribeTest() {
     guiInfo('');
     guiShowPanel('subscribe_panel');
-    guiSubscribeButtons();
+    guiShowButtons();
 }
 
-function guiSubscribeButtons() {
+function guiShowButtons() {
     document.getElementById('send_init_subscribe_btn').disabled = !!subscriber;
     document.getElementById('send_next_subscribe_btn').disabled = !subscriber;
     document.getElementById('send_unsubscribe_btn').disabled = !subscriber;
@@ -309,17 +309,17 @@ function guiSendInitSubscribe() {
         console.log(`subscriber>>: terminated (${terminationText})`);
         guiWarning(`subscriber: terminated (${terminationText})`);
         subscriber = null;
-        guiSubscribeButtons();
+        guiShowButtons();
     });
 
-    if( expires > 0 ){
-      // normal subscribe
-      subscriber.subscribe();
+    if (expires > 0) {
+        // normal subscribe
+        subscriber.subscribe();
     } else {
-      // fetch SUBSCRIBE (with expires: 0), see RFC 6665 4.4.3
-      subscriber.unsubscribe();
+        // fetch SUBSCRIBE (with expires: 0), see RFC 6665 4.4.3
+        subscriber.unsubscribe();
     }
-    guiSubscribeButtons();
+    guiShowButtons();
 }
 
 // Convert termination code to English message.
@@ -364,35 +364,40 @@ function createNotifier(subscribe) {
     const ourContentType = 'text/plain';
     let pending = true; // server dialog can be created in 'active' or 'pending' state
 
+    // to test fetch 
+    const isFetchSubscribe = subscribe.getHeader('expires') === '0';
+
     notifier = jssipUA.notifier({ subscribe, content_type: ourContentType, pending });
 
+    // The event called for intitial and next subscribes.
     notifier.on('subscribe', (isUnsubscribe, subscribe, body, contentType) => {
-        console.log(`server dialog>> receive ${isUnsubscribe ? 'un-' : ''}SUBSCRIBE`, subscribe, body, contentType, isUnsubscribe);
+        console.log(`notifier>> receive ${isUnsubscribe ? 'un-' : ''}SUBSCRIBE`, subscribe, body, contentType, isUnsubscribe);
         guiInfo('receive subscribe');
-        if (!isUnsubscribe) {
+        if (isUnsubscribe) {
+            notifier.sendFinalNotify(`Provide current system state (final notify)${isFetchSubscribe ? ' (fetch subscribe)' : ''}`);
+        } else {
             if (notifier.state === 'pending') {
                 notifier.sendNotify('Dialog state is pending. Do not provide system state');
             } else {
                 notifier.sendNotify('Provide current system state');
             }
         }
+        guiShowButtons();
     });
 
     notifier.on('terminated', (terminationCode, sendFinalNotify) => {
         let terminationText = notifierTerminationText(notifier, terminationCode);
         guiWarning(`notifier>> terminated (${terminationText})`);
         // You must send final NOTIFY after termination (with or without body)
+        // (setFinalNotify=true for subscription timeout)
         if (sendFinalNotify) {
-            // to test subscriber unsubscribe timeout comment next line
             notifier.sendFinalNotify('Final notify. Provide current system state (if was)');
         }
         notifier = null;
-        guiSubscribeButtons();
+        guiShowButtons();
     });
 
-    console.log('send 1st notify');
-    notifier.sendNotify('1st notify');  // Send 1st NOTIFY immediately. Can be with or without body.
-    guiSubscribeButtons();
+    notifier.start();
 }
 
 function notifierTerminationText(notifier, terminationCode) {
