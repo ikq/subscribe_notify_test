@@ -7,9 +7,9 @@ Note:
 It's JsSIP subscriber/notifier API test, not presence client.
 To use the code as presence client, you should modify the subscriber constructor argumentsand create SUBSCRIBE with appropriate for your server :
 
-- event_name ( probably 'presence' ?)
+- eventName ( probably 'presence' ?)
 - accept - list of content-type that will be used in receiving NOTIFYs. 
-- content-type - content-type of your SUBSCRIBE
+- contentType - content-type of your SUBSCRIBE
 - set some body (if need) to subscriber.subscribe(). (in my test I send without body)
 
 To adopt the example for your case, you should take a SIP trace for some client working with your server,
