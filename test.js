@@ -211,8 +211,8 @@ function incomingSubscribe(subscribe, eventName, accepts) {
         createNotifier(subscribe);
         return 0; // Don't send SIP response. The created dialog send it.
     } catch (e) {
-        guiWarning('Cannot create server subscribe dialog');
-        console.log('Cannot create server subscribe dialog', e);
+        guiWarning('Cannot notifier');
+        console.log('Cannot notifier', e);
         return 400; // send SIP response 400 Bad Request.
     }
 }
@@ -273,16 +273,16 @@ function guiSendInitSubscribe() {
 
     try {
         subscriber = jssipUA.subscriber(target, {
-            event_name: eventName,          // event name with optional ;id=xxx
+            eventName,          // event name with optional ;id=xxx
             accept: 'text/json,text/plain', // We understand NOTIFY with the Content-Type
             expires: expires,               // Subscription expires. E.g. 3600
-            content_type: 'text/plain',     // Content-Type of SUBSCRIBE requests.
+            contentType: 'text/plain',      // Content-Type of SUBSCRIBE requests.
             params: params,
             credential: credential,
         });
     } catch (e) {
-        console.log('Error: cannot create client subscribe dialog', e);
-        guiError('Cannot create client dialog');
+        console.log('Error: cannot create subscriber', e);
+        guiError('Cannot create subscriber');
     }
 
     // After receiving NOTIFY with Subscription-State: active
@@ -295,20 +295,28 @@ function guiSendInitSubscribe() {
         The NOTIFY can with or without body.
         If NOTIFY Subscription-State: terminated - the argument isTerminated = true 
     */
-    subscriber.on('notify', (is_final, notify, body, content_type) => { // with not empty body
-        console.log(`>> receive ${is_final ? 'final ' : ''}NOTIFY`, notify, body, content_type);
-        guiInfo(`receive ${is_final ? 'final ' : ''}notify`);
+    subscriber.on('notify', (isFinal, notify, body, contentType) => { // with not empty body
+        console.log(`>> receive ${isFinal ? 'final ' : ''}NOTIFY`, notify, body, contentType);
+        guiInfo(`receive ${isFinal ? 'final ' : ''}notify`);
     });
 
     /**
      * subscriber dialog terminated. 
-     * See  subscriberTerminationText with list of reasons.
+     * 
+     * termination code converted to English text.
+     * 
+     * For code RECEIVE_FINAL_NOTIFY can be set optional SubscriptionState header parameters:
+     *  reason  (undefined or string)
+     *  retryAfter (undefined or number)
      */
-    subscriber.on('terminated', (terminationCode) => {
+    subscriber.on('terminated', (terminationCode, reason, retryAfter) => {
         let terminationText = subscriberTerminationText(subscriber, terminationCode);
-        console.log(`subscriber>>: terminated (${terminationText})`);
-        guiWarning(`subscriber: terminated (${terminationText})`);
+        console.log(`subscriber>>: terminated (${terminationText})${reason ? (' reason="' + reason + '"') : ''}${retryAfter !== undefined ? (' retry-after=' + retryAfter) : ''}`);
+        guiWarning(`subscriber: terminated (${terminationText})${reason ? (' reason="' + reason + '"') : ''}`);
         subscriber = null;
+        if( retryAfter !== undefined ){
+            console.log(`You asked repeat subscription after ${retryAfter} seconds`);
+        }
         guiShowButtons();
     });
 
@@ -367,7 +375,7 @@ function createNotifier(subscribe) {
     // to test fetch 
     const isFetchSubscribe = subscribe.getHeader('expires') === '0';
 
-    notifier = jssipUA.notifier({ subscribe, content_type: ourContentType, pending });
+    notifier = jssipUA.notifier({ subscribe, contentType: ourContentType, pending });
 
     // The event called for intitial and next subscribes.
     notifier.on('subscribe', (isUnsubscribe, subscribe, body, contentType) => {
@@ -431,5 +439,9 @@ function guiSendFinalNotify() {
         guiWarning('No server subscribe dialog');
         return;
     }
-    notifier.sendFinalNotify();
+    // final notify
+    // notifier.sendFinalNotify('final state');
+
+    // final notify with reason and retry-after
+    notifier.sendFinalNotify('final state', 'probation', 20);
 }
