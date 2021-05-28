@@ -16810,8 +16810,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
      */
 
     /**
-     * The called after constructor and event handlers settings.
-     * To use events 'subscribe' and 'terminated' for initial subscribe
+     * Should be called after creating the Notifier instance and setting the event handlers
      */
 
   }, {
@@ -16953,7 +16952,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
       this._expires_timestamp = new Date().getTime() + this._expires * 1000;
       clearTimeout(this._expires_timer);
-      setTimeout(function () {
+      this._expires_timer = setTimeout(function () {
         if (_this2._is_final_notify_sent) {
           return;
         }
