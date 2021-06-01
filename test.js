@@ -260,26 +260,16 @@ function guiSendInitSubscribe() {
       }
     */
 
-    let credential = null;
-    /* 
-     credential is optional.
-     Used if authentication is different from REGISTER/INVITE
-
-     let credential = {
-         authorization_user: phone.account.authUser ? phone.account.authUser : phone.account.user,
-         password: phone.account.password
-     };
-    */
-
     try {
-        subscriber = jssipUA.subscriber(target, {
-            eventName,          // event name with optional ;id=xxx
-            accept: 'text/json,text/plain', // We understand NOTIFY with the Content-Type
-            expires: expires,               // Subscription expires. E.g. 3600
-            contentType: 'text/plain',      // Content-Type of SUBSCRIBE requests.
-            params: params,
-            credential: credential,
-        });
+        subscriber = jssipUA.subscribe(
+            target,
+            eventName,              // event name with optional ;id=xxx
+            'text/json,text/plain', // We understand NOTIFY with the Content-Type
+            {
+                expires: expires,               // Subscription expires. E.g. 3600
+                contentType: 'text/plain',      // Content-Type of SUBSCRIBE requests.
+                params: params,
+            });
     } catch (e) {
         console.log('Error: cannot create subscriber', e);
         guiError('Cannot create subscriber');
@@ -317,7 +307,7 @@ function guiSendInitSubscribe() {
         console.log(`subscriber>>: terminated (${terminationText})${reason ? (' reason="' + reason + '"') : ''}${retryAfter !== undefined ? (' retry-after=' + retryAfter) : ''}`);
         guiWarning(`subscriber: terminated (${terminationText})${reason ? (' reason="' + reason + '"') : ''}`);
         subscriber = null;
-        if( retryAfter !== undefined ){
+        if (retryAfter !== undefined) {
             console.log(`You asked repeat subscription after ${retryAfter} seconds`);
         }
         guiShowButtons();
@@ -328,7 +318,7 @@ function guiSendInitSubscribe() {
         subscriber.subscribe();
     } else {
         // fetch SUBSCRIBE (with expires: 0), see RFC 6665 4.4.3
-        subscriber.unsubscribe();
+        subscriber.terminate();
     }
     guiShowButtons();
 }
@@ -350,7 +340,7 @@ function subscriberTerminationText(subscriber, terminationCode) {
 // Send next SUBSCRIBE (after initial)
 function guiSendNextSubscribe() {
     if (subscriber === null || subscriber.state === 'terminated') {
-        guiWarning('No client subscribe dialog');
+        guiWarning('No subscriber');
         return;
     }
     subscriber.subscribe('Next subscribe');
@@ -359,10 +349,10 @@ function guiSendNextSubscribe() {
 // Send unSubscribe (SUBSCRIBE with expires: 0)
 function guiSendUnsubscribe() {
     if (subscriber === null || subscriber.state === 'terminated') {
-        guiWarning('No client subscribe dialog');
+        guiWarning('No subscriber');
         return;
     }
-    subscriber.unsubscribe();
+    subscriber.terminate();
 }
 
 //-----------------------------------------------------------------------
@@ -378,30 +368,30 @@ function createNotifier(subscribe) {
     // to test fetch 
     const isFetchSubscribe = subscribe.getHeader('expires') === '0';
 
-    notifier = jssipUA.notifier({ subscribe, contentType: ourContentType, pending });
+    notifier = jssipUA.notify(subscribe, ourContentType, {pending });
 
     // The event called for intitial and next subscribes.
     notifier.on('subscribe', (isUnsubscribe, subscribe, body, contentType) => {
         console.log(`notifier>> receive ${isUnsubscribe ? 'un-' : ''}SUBSCRIBE`, subscribe, body, contentType, isUnsubscribe);
         guiInfo('receive subscribe');
         if (isUnsubscribe) {
-            notifier.sendFinalNotify(`Provide current system state (final notify)${isFetchSubscribe ? ' (fetch subscribe)' : ''}`);
+            notifier.terminate(`Provide current system state (final notify)${isFetchSubscribe ? ' (fetch subscribe)' : ''}`);
         } else {
             if (notifier.state === 'pending') {
-                notifier.sendNotify('State is pending. Do not provide system state');
+                notifier.notify('State is pending. Do not provide system state');
             } else {
-                notifier.sendNotify('Provide current system state');
+                notifier.notify('Provide current system state');
             }
         }
     });
 
-    notifier.on('terminated', (terminationCode, sendFinalNotify) => {
+    notifier.on('terminated', (terminationCode, finalNotify) => {
         let terminationText = notifierTerminationText(notifier, terminationCode);
         guiWarning(`notifier>> terminated (${terminationText})`);
-        // sendFinalNotify=true for subscription timeout case
-        // you have to send final NOTIFY in the case (with or without body)
-        if (sendFinalNotify) {
-            notifier.sendFinalNotify('Final notify. Provide current system state (if was)');
+        // finalNotify=true for subscription timeout case
+        // You have to send final NOTIFY in the case (with or without body)
+        if (finalNotify) {
+            notifier.terminated('Final notify. Provide current system state (if was)');
         }
         notifier = null;
         guiShowButtons();
