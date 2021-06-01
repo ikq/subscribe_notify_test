@@ -424,7 +424,7 @@ function guiSendNotify() {
         console.log('Switch state from "pending" to "active"');
         notifier.setActiveState();
     }
-    notifier.sendNotify('Hi !');
+    notifier.notify('Hi !');
 }
 
 function guiSendFinalNotify() {
@@ -433,8 +433,8 @@ function guiSendFinalNotify() {
         return;
     }
     // final notify
-    // notifier.sendFinalNotify('final state');
+    // notifier.terminate('final state');
 
     // final notify with reason and retry-after
-    notifier.sendFinalNotify('final state', 'probation', 20);
+    notifier.terminate('final state', 'probation', 20);
 }

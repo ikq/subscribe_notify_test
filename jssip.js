@@ -22816,11 +22816,12 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       throw new TypeError('eventName - wrong format');
     }
 
-    var eventValue = parsed.event;
-    var eventId = parsed.params && parsed.params.id;
+    _this._event_name = parsed.event;
+    _this._event_id = parsed.params && parsed.params.id;
+    var eventValue = _this._event_name;
 
-    if (eventId) {
-      eventValue += ";id=".concat(_this.eventId);
+    if (_this._event_id) {
+      eventValue += ";id=".concat(_this._event_id);
     }
 
     _this._headers = Utils.cloneArray(extraHeaders);
