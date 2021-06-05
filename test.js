@@ -339,7 +339,7 @@ function subscriberTerminationText(subscriber, terminationCode) {
 
 // Send next SUBSCRIBE (after initial)
 function guiSendNextSubscribe() {
-    if (subscriber === null || subscriber.state === 'terminated') {
+    if (subscriber === null || subscriber.state === subscriber.C.STATE_TERMINATED) {
         guiWarning('No subscriber');
         return;
     }
@@ -348,7 +348,7 @@ function guiSendNextSubscribe() {
 
 // Send unSubscribe (SUBSCRIBE with expires: 0)
 function guiSendUnsubscribe() {
-    if (subscriber === null || subscriber.state === 'terminated') {
+    if (subscriber === null || subscriber.state === subscriber.C.STATE_TERMINATED) {
         guiWarning('No subscriber');
         return;
     }
@@ -377,7 +377,7 @@ function createNotifier(subscribe) {
         if (isUnsubscribe) {
             notifier.terminate(`Provide current system state (final notify)${isFetchSubscribe ? ' (fetch subscribe)' : ''}`);
         } else {
-            if (notifier.state === 'pending') {
+            if (notifier.state === notifier.C.STATE_PENDING) {
                 notifier.notify('State is pending. Do not provide system state');
             } else {
                 notifier.notify('Provide current system state');
@@ -415,12 +415,12 @@ function notifierTerminationText(notifier, terminationCode) {
 }
 
 function guiSendNotify() {
-    if (notifier === null || notifier.state === 'terminated') {
+    if (notifier === null || notifier.state === notifier.C.STATE_TERMINATED) {
         guiWarning('No notifier');
         return;
     }
     // Switch state from pending to active.
-    if (notifier.state === 'pending') {
+    if (notifier.state === notifier.C.STATE_PENDING) {
         console.log('Switch state from "pending" to "active"');
         notifier.setActiveState();
     }
@@ -428,7 +428,7 @@ function guiSendNotify() {
 }
 
 function guiSendFinalNotify() {
-    if (notifier === null || notifier.state === 'terminated') {
+    if (notifier === null || notifier.state === notifier.C.STATE_TERMINATED) {
         guiWarning('No notifier');
         return;
     }

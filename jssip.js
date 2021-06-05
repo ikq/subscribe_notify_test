@@ -1,7 +1,7 @@
 /*
- * JsSIP v3.7.5
+ * JsSIP v3.7.6
  * the Javascript SIP library
- * Copyright: 2012-2021 José Luis Millán <jmillan@aliax.net> (https://github.com/jmillan)
+ * Copyright: 2012-2021 
  * Homepage: https://jssip.net
  * License: MIT
  */
@@ -16628,13 +16628,18 @@ debugerror.log = console.warn.bind(console);
  */
 
 var C = {
+  // Termination codes.
   NOTIFY_RESPONSE_TIMEOUT: 0,
   NOTIFY_TRANSPORT_ERROR: 1,
   NOTIFY_NON_OK_RESPONSE: 2,
   NOTIFY_FAILED_AUTHENTICATION: 3,
   SEND_FINAL_NOTIFY: 4,
   RECEIVE_UNSUBSCRIBE: 5,
-  SUBSCRIPTION_EXPIRED: 6
+  SUBSCRIPTION_EXPIRED: 6,
+  // Notifer states
+  STATE_PENDING: 0,
+  STATE_ACTIVE: 1,
+  STATE_TERMINATED: 2
 };
 /**
  * RFC 6665 Notifier implementation.
@@ -16679,7 +16684,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     _this._expires_timestamp = null;
     _this._expires_timer = null; // Notifier state: pending, active, terminated. Not used: init, resp_wait.
 
-    _this._state = pending ? 'pending' : 'active';
+    _this._state = pending ? C.STATE_PENDING : C.STATE_ACTIVE;
     _this._is_final_notify_sent = false;
     _this._is_first_notify_response = true; // To prevent duplicate emit 'terminated'.
 
@@ -16843,8 +16848,8 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     value: function setActiveState() {
       debug('setActiveState()');
 
-      if (this._state === 'pending') {
-        this._state = 'active';
+      if (this._state === C.STATE_PENDING) {
+        this._state = C.STATE_ACTIVE;
       }
     }
     /**
@@ -16863,9 +16868,9 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
         return;
       }
 
-      var subs_state = this._state;
+      var subs_state = this._stateNumberToString(this._state);
 
-      if (this._state !== 'terminated') {
+      if (this._state !== C.STATE_TERMINATED) {
         var expires = Math.floor((this._expires_timestamp - new Date().getTime()) / 1000);
 
         if (expires < 0) {
@@ -16912,7 +16917,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       var reason = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : null;
       var retryAfter = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : null;
       debug('terminate()');
-      this._state = 'terminated';
+      this._state = C.STATE_TERMINATED;
       this._terminated_reason = reason;
       this._terminated_retry_after = retryAfter;
       this.notify(body);
@@ -16950,7 +16955,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       }
 
       this._is_terminated = true;
-      this._state = 'terminated';
+      this._state = C.STATE_TERMINATED;
       clearTimeout(this._expires_timer);
 
       if (this._id) {
@@ -16982,6 +16987,23 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
         _this2._dialogTerminated(C.SUBSCRIPTION_EXPIRED);
       }, this._expires * 1000);
+    }
+  }, {
+    key: "_stateNumberToString",
+    value: function _stateNumberToString(state) {
+      switch (state) {
+        case C.STATE_PENDING:
+          return 'pending';
+
+        case C.STATE_ACTIVE:
+          return 'active';
+
+        case C.STATE_TERMINATED:
+          return 'terminated';
+
+        default:
+          throw new TypeError('wrong state value');
+      }
     }
   }], [{
     key: "C",
@@ -21225,8 +21247,8 @@ module.exports = /*#__PURE__*/function () {
   function Registrator(ua, transport) {
     _classCallCheck(this, Registrator);
 
-    var reg_id = 1; // Force reg_id to 1.
-
+    // Force reg_id to 1.
+    this._reg_id = 1;
     this._ua = ua;
     this._transport = transport;
     this._registrar = ua.configuration.registrar_server;
@@ -21247,12 +21269,11 @@ module.exports = /*#__PURE__*/function () {
 
     this._extraHeaders = []; // Custom Contact header params for REGISTER and un-REGISTER.
 
-    this._extraContactParams = '';
+    this._extraContactParams = ''; // Contents of the sip.instance Contact header parameter.
 
-    if (reg_id) {
-      this._contact += ";reg-id=".concat(reg_id);
-      this._contact += ";+sip.instance=\"<urn:uuid:".concat(this._ua.configuration.instance_id, ">\"");
-    }
+    this._sipInstance = "\"<urn:uuid:".concat(this._ua.configuration.instance_id, ">\"");
+    this._contact += ";reg-id=".concat(this._reg_id);
+    this._contact += ";+sip.instance=".concat(this._sipInstance);
   }
 
   _createClass(Registrator, [{
@@ -21351,10 +21372,17 @@ module.exports = /*#__PURE__*/function () {
                 var contacts = response.headers['Contact'].reduce(function (a, b) {
                   return a.concat(b.parsed);
                 }, []); // Get the Contact pointing to us and update the expires value accordingly.
+                // Try to find a matching Contact using sip.instance and reg-id.
 
                 var contact = contacts.find(function (element) {
-                  return element.uri.user === _this._ua.contact.uri.user;
-                });
+                  return _this._sipInstance === element.getParam('+sip.instance') && _this._reg_id === parseInt(element.getParam('reg-id'));
+                }); // If no match was found using the sip.instance try comparing the URIs.
+
+                if (!contact) {
+                  contact = contacts.find(function (element) {
+                    return element.uri.user === _this._ua.contact.uri.user;
+                  });
+                }
 
                 if (!contact) {
                   debug('no Contact header pointing to us, response ignored');
@@ -22711,13 +22739,20 @@ debugerror.log = console.warn.bind(console);
  */
 
 var C = {
+  // Termination codes.
   SUBSCRIBE_RESPONSE_TIMEOUT: 0,
   SUBSCRIBE_TRANSPORT_ERROR: 1,
   SUBSCRIBE_NON_OK_RESPONSE: 2,
   SUBSCRIBE_FAILED_AUTHENTICATION: 3,
   UNSUBSCRIBE_TIMEOUT: 4,
   RECEIVE_FINAL_NOTIFY: 5,
-  RECEIVE_BAD_NOTIFY: 6
+  RECEIVE_BAD_NOTIFY: 6,
+  // Subscriber states.
+  STATE_PENDING: 0,
+  STATE_ACTIVE: 1,
+  STATE_TERMINATED: 2,
+  STATE_INIT: 3,
+  STATE_NOTIFY_WAIT: 4
 };
 /**
  * RFC 6665 Subscriber implementation.
@@ -22793,10 +22828,10 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
     if (_this._params.cseq === undefined) {
       _this._params.cseq = Math.floor(Math.random() * 10000 + 1);
-    } // Subscriber state: init, notify_wait, pending, active, terminated.
+    } // Subscriber state.
 
 
-    _this._state = 'init'; // Dialog id. 
+    _this._state = C.STATE_INIT; // Dialog id. 
 
     _this._id = null; // To refresh subscription.
 
@@ -22962,10 +22997,11 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
         this._is_first_notify_request = false; // TODO: see RFC 6665 4.4.1. If route_set should be updated here ?
       }
 
-      var new_state = subs_state.state.toLowerCase();
+      var new_state = this._stateStringToNumber(subs_state.state);
+
       var prev_state = this._state;
 
-      if (prev_state !== 'terminated' && new_state !== 'terminated') {
+      if (prev_state !== C.STATE_TERMINATED && new_state !== C.STATE_TERMINATED) {
         this._state = new_state;
 
         if (subs_state.expires !== undefined) {
@@ -22981,14 +23017,14 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
         }
       }
 
-      if (prev_state !== 'active' && new_state === 'active') {
+      if (prev_state !== C.STATE_ACTIVE && new_state === C.STATE_ACTIVE) {
         debug('emit "active"');
         this.emit('active');
       }
 
       var body = request.body; // Check if the NOTIFY is final.
 
-      var is_final = new_state === 'terminated'; // Notify event fired for NOTIFY with body.
+      var is_final = new_state === C.STATE_TERMINATED; // Notify event fired for NOTIFY with body.
 
       if (body) {
         var content_type = request.getHeader('content-type');
@@ -23022,8 +23058,8 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       var body = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : null;
       debug('subscribe()');
 
-      if (this._state === 'init') {
-        this._state = 'notify_wait';
+      if (this._state === C.STATE_INIT) {
+        this._state = C.STATE_NOTIFY_WAIT;
       }
 
       var headers = this._headers.slice();
@@ -23105,7 +23141,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       }
 
       this._is_terminated = true;
-      this._state = 'terminated'; // Clear timers.
+      this._state = C.STATE_TERMINATED; // Clear timers.
 
       clearTimeout(this._expires_timer);
       clearTimeout(this._unsubscribe_timeout_timer);
@@ -23142,6 +23178,29 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
         _this3._send(null, _this3._headers);
       }, timeout);
+    }
+  }, {
+    key: "_stateStringToNumber",
+    value: function _stateStringToNumber(strState) {
+      switch (strState) {
+        case 'pending':
+          return C.STATE_PENDING;
+
+        case 'active':
+          return C.STATE_ACTIVE;
+
+        case 'terminated':
+          return C.STATE_TERMINATED;
+
+        case 'init':
+          return C.STATE_INIT;
+
+        case 'notify_wait':
+          return C.STATE_NOTIFY_WAIT;
+
+        default:
+          throw new TypeError('wrong state value');
+      }
     }
   }], [{
     key: "C",
@@ -28780,11 +28839,11 @@ module.exports={
   "name": "jssip",
   "title": "JsSIP",
   "description": "the Javascript SIP library",
-  "version": "3.7.5",
+  "version": "3.7.6",
   "homepage": "https://jssip.net",
-  "author": "José Luis Millán <jmillan@aliax.net> (https://github.com/jmillan)",
   "contributors": [
-    "Iñaki Baz Castillo <ibc@aliax.net> (https://github.com/ibc)"
+    "José Luis Millán <jmillan@aliax.net> (https://github.com/jmillan)",
+    "Iñaki Baz Castillo <ibc@aliax.net> (https://inakibaz.me)"
   ],
   "types": "lib/JsSIP.d.ts",
   "main": "lib-es5/JsSIP.js",
