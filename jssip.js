@@ -22918,7 +22918,11 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
           if (route_set.length > 0) {
             this._params.route_set = route_set;
-          }
+          } // To wait for a response to the initial subscribe
+
+
+          debug('emit "initialSubscribeOK"');
+          this.emit('initialSubscribeOK');
         } // Check expires value.
 
 
@@ -23017,7 +23021,10 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
         }
       }
 
-      if (prev_state !== C.STATE_ACTIVE && new_state === C.STATE_ACTIVE) {
+      if (prev_state !== C.STATE_PENDING && new_state === C.STATE_PENDING) {
+        debug('emit "pending"');
+        this.emit('pending');
+      } else if (prev_state !== C.STATE_ACTIVE && new_state === C.STATE_ACTIVE) {
         debug('emit "active"');
         this.emit('active');
       }
@@ -23060,6 +23067,10 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
       if (this._state === C.STATE_INIT) {
         this._state = C.STATE_NOTIFY_WAIT;
+      } else if (this._params.to_tag === null) {
+        // Although some notifiers accept this,
+        // it will be right to wait the event 'initialSubscribeOK' or 'active'
+        debugerror('sending subsequent subscribe before OK response to initial subscribe');
       }
 
       var headers = this._headers.slice();

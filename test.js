@@ -80,10 +80,9 @@ function init() {
             return;
         }
     } else {
-        guiInfo('Please fill server & account');
+        guiError('Please fill server & account');
         guiShowPanel('setting_panel');
     }
-
 }
 
 //----------------- Local storage load/store ----------------------
@@ -391,7 +390,7 @@ function createNotifier(subscribe) {
         // finalNotify=true for subscription timeout case
         // You have to send final NOTIFY in the case (with or without body)
         if (finalNotify) {
-            notifier.terminated('Final notify. Provide current system state (if was)');
+            notifier.terminate('Final notify. Provide current system state (if was)');
         }
         notifier = null;
         guiShowButtons();
