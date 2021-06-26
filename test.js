@@ -246,7 +246,10 @@ function guiSendInitSubscribe() {
 
     let target = sendToUser;
 
-    let params = null;
+    //let params = null;
+    let params = {
+        cseq: 10
+    };
     /*
       params is optional.
       Used if domain or from-user is different from used in REGISTER/INVITE
@@ -312,6 +315,10 @@ function guiSendInitSubscribe() {
         guiShowButtons();
     });
 
+    subscriber.on('dialogCreated', () => {
+        console.log('subscriber>>: dialogCreated');
+    });
+
     if (expires > 0) {
         // normal subscribe
         subscriber.subscribe();
@@ -328,6 +335,7 @@ function subscriberTerminationText(subscriber, terminationCode) {
         case subscriber.C.SUBSCRIBE_RESPONSE_TIMEOUT: return 'subscribe response timeout';
         case subscriber.C.SUBSCRIBE_TRANSPORT_ERROR: return 'subscribe transport error';
         case subscriber.C.SUBSCRIBE_NON_OK_RESPONSE: return 'subscribe non-OK response';
+        case subscriber.C.SUBSCRIBE_BAD_OK_RESPONSE: return 'subscribe bad-OK response';
         case subscriber.C.SUBSCRIBE_FAILED_AUTHENTICATION: return 'subscribe failed authentication';
         case subscriber.C.UNSUBSCRIBE_TIMEOUT: return 'un-unsubscribe timeout';
         case subscriber.C.RECEIVE_FINAL_NOTIFY: return 'receive final notify';
@@ -367,7 +375,7 @@ function createNotifier(subscribe) {
     // to test fetch 
     const isFetchSubscribe = subscribe.getHeader('expires') === '0';
 
-    notifier = jssipUA.notify(subscribe, ourContentType, {pending });
+    notifier = jssipUA.notify(subscribe, ourContentType, { pending });
 
     // The event called for intitial and next subscribes.
     notifier.on('subscribe', (isUnsubscribe, subscribe, body, contentType) => {

@@ -16682,10 +16682,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     _this._expires_timestamp = null;
     _this._expires_timer = null; // Notifier state: pending, active, terminated. Not used: init, resp_wait.
 
-    _this._state = pending ? C.STATE_PENDING : C.STATE_ACTIVE;
-    _this._is_final_notify_sent = false; // To prevent duplicate emit 'terminated'.
-
-    _this._is_terminated = false; // Optional. Used to build terminated Subscription-State.
+    _this._state = pending ? C.STATE_PENDING : C.STATE_ACTIVE; // Optional. Used to build terminated Subscription-State.
 
     _this._terminated_reason = null;
     _this._terminated_retry_after = null; // Custom session empty object for high level use.
@@ -16715,7 +16712,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     }
 
     _this._target = subscribe.from.uri.user;
-    subscribe.to_tag = Utils.newTag(); // Create dialog for normal and fetch SUBSCRIBE
+    subscribe.to_tag = Utils.newTag(); // Create dialog for normal and fetch-subscribe.
 
     var dialog = new Dialog(_assertThisInitialized(_this), subscribe, 'UAS');
 
@@ -16783,7 +16780,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
      */
 
     /**
-     * Should be called after creating the Notifier instance and setting the event handlers.
+     * Please call after creating the Notifier instance and setting the event handlers.
      */
 
   }, {
@@ -16806,7 +16803,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       }
     }
     /**
-     *  Send the initial and subsequent NOTIFY request.
+     *  Send the initial and subsequent notify request.
      *  @param {string} body - notify request body.
      */
 
@@ -16818,7 +16815,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       var body = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : null;
       debug('notify()'); // Prevent send notify after final notify.
 
-      if (this._is_final_notify_sent) {
+      if (!this._dialog) {
         debugerror('final notify has sent');
         return;
       }
@@ -16849,10 +16846,6 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
       if (body) {
         headers.push("Content-Type: ".concat(this._content_type));
-      }
-
-      if (!this._dialog) {
-        throw new Error('no dialog');
       }
 
       this._dialog.sendRequest(JsSIP_C.NOTIFY, {
@@ -16897,7 +16890,6 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       this._terminated_reason = reason;
       this._terminated_retry_after = retryAfter;
       this.notify(body);
-      this._is_final_notify_sent = true;
 
       this._dialogTerminated(C.SEND_FINAL_NOTIFY);
     }
@@ -16926,16 +16918,17 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
   }, {
     key: "_dialogTerminated",
     value: function _dialogTerminated(termination_code) {
-      if (this._is_terminated) {
+      if (!this._dialog) {
         return;
       }
 
-      this._is_terminated = true;
       this._state = C.STATE_TERMINATED;
       clearTimeout(this._expires_timer);
 
       if (this._dialog) {
         this._dialog.terminate();
+
+        this._dialog = null;
       }
 
       var send_final_notify = termination_code === C.SUBSCRIPTION_EXPIRED;
@@ -16950,12 +16943,11 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       this._expires_timestamp = new Date().getTime() + this._expires * 1000;
       clearTimeout(this._expires_timer);
       this._expires_timer = setTimeout(function () {
-        if (_this3._is_final_notify_sent) {
+        if (!_this3._dialog) {
           return;
         }
 
         _this3._terminated_reason = 'timeout';
-        _this3._is_final_notify_sent = true;
 
         _this3.notify();
 
@@ -22719,10 +22711,11 @@ var C = {
   SUBSCRIBE_RESPONSE_TIMEOUT: 0,
   SUBSCRIBE_TRANSPORT_ERROR: 1,
   SUBSCRIBE_NON_OK_RESPONSE: 2,
-  SUBSCRIBE_FAILED_AUTHENTICATION: 3,
-  UNSUBSCRIBE_TIMEOUT: 4,
-  RECEIVE_FINAL_NOTIFY: 5,
-  RECEIVE_BAD_NOTIFY: 6,
+  SUBSCRIBE_BAD_OK_RESPONSE: 3,
+  SUBSCRIBE_FAILED_AUTHENTICATION: 4,
+  UNSUBSCRIBE_TIMEOUT: 5,
+  RECEIVE_FINAL_NOTIFY: 6,
+  RECEIVE_BAD_NOTIFY: 7,
   // Subscriber states.
   STATE_PENDING: 0,
   STATE_ACTIVE: 1,
@@ -22781,7 +22774,6 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
     _this._ua = ua;
     _this._target = target;
-    _this._accept = accept;
 
     if (expires !== 0 && !expires) {
       expires = 900;
@@ -22789,7 +22781,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
     _this._expires = expires; // Used to subscribe with body.
 
-    _this._content_type = contentType; // Set initial SUBSCRIBE parameters.
+    _this._content_type = contentType; // Set initial subscribe parameters.
 
     _this._params = Utils.cloneObject(params);
 
@@ -22799,23 +22791,21 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
     _this._params.from_tag = Utils.newTag();
     _this._params.to_tag = null;
-    _this._params.call_id = Utils.createRandomToken(20); // Create cseq if not defined custom cseq.
+    _this._params.call_id = Utils.createRandomToken(20); // Create subscribe cseq if not defined custom cseq.
 
     if (_this._params.cseq === undefined) {
       _this._params.cseq = Math.floor(Math.random() * 10000 + 1);
     } // Subscriber state.
 
 
-    _this._state = C.STATE_INIT;
-    _this._dialog = null;
-    _this._request = null; // To refresh subscription.
+    _this._state = C.STATE_INIT; // Dialog
+
+    _this._dialog = null; // To refresh subscription.
 
     _this._expires_timer = null;
     _this._expires_timestamp = null; // To prevent duplicate un-subscribe sending.
 
-    _this._send_unsubscribe = false; // To prevent duplicate emit terminated event.
-
-    _this._is_terminated = false; // After send un-subscribe wait final NOTIFY limited time.
+    _this._send_unsubscribe = false; // After send un-subscribe wait final notify limited time.
 
     _this._unsubscribe_timeout_timer = null; // Custom session empty object for high level use.    
 
@@ -22835,7 +22825,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     }
 
     _this._headers = Utils.cloneArray(extraHeaders);
-    _this._headers = _this._headers.concat(["Event: ".concat(eventValue), "Expires: ".concat(_this._expires), "Accept: ".concat(_this._accept)]);
+    _this._headers = _this._headers.concat(["Event: ".concat(eventValue), "Expires: ".concat(_this._expires), "Accept: ".concat(accept)]);
 
     if (!_this._headers.find(function (header) {
       return header.startsWith('Contact');
@@ -22947,9 +22937,9 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
         this.emit('active');
       }
 
-      var body = request.body; // Check if the NOTIFY is final.
+      var body = request.body; // Check if the notify is final.
 
-      var is_final = new_state === C.STATE_TERMINATED; // Notify event fired for NOTIFY with body.
+      var is_final = new_state === C.STATE_TERMINATED; // Notify event fired only for notify with body.
 
       if (body) {
         var content_type = request.getHeader('content-type');
@@ -22973,7 +22963,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
      */
 
     /** 
-     * Send the initial (non-fetch)  and subsequent SUBSCRIBE.
+     * Send the initial (non-fetch)  and subsequent subscribe.
      * @param {string} body - subscribe request body.
      */
 
@@ -22993,8 +22983,8 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     }
     /** 
      * terminate. 
-     * Send un-SUBSCRIBE or fetch-SUBSCRIBE (with Expires: 0).
-     * @param {string} body - Un-subscribe request body
+     * Send un-subscribe or fetch-subscribe (with Expires: 0).
+     * @param {string} body - un-subscribe request body
      */
 
   }, {
@@ -23017,7 +23007,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       });
 
       if (!this._dialog) {
-        // Fetch-SUBSCRIBE is the first and last one.
+        // fetch-subscribe - initial subscribe with Expires: 0.
         this._sendInitialSubscribe(body, headers);
       } else {
         this._sendSubsequentSubscribe(body, headers);
@@ -23065,16 +23055,13 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
         headers.push("Content-Type: ".concat(this._content_type));
       }
 
-      this._request = new SIPMessage.OutgoingRequest(JsSIP_C.SUBSCRIBE, this._ua.normalizeTarget(this._target), this._ua, this._params, headers, body);
-      var request_sender = new RequestSender(this._ua, this._request, {
+      var request = new SIPMessage.OutgoingRequest(JsSIP_C.SUBSCRIBE, this._ua.normalizeTarget(this._target), this._ua, this._params, headers, body);
+      var request_sender = new RequestSender(this._ua, request, {
         onRequestTimeout: function onRequestTimeout() {
           _this3.onRequestTimeout();
         },
         onTransportError: function onTransportError() {
           _this3.onTransportError();
-        },
-        onAuthenticated: function onAuthenticated(request) {
-          _this3._request = request;
         },
         onReceiveResponse: function onReceiveResponse(response) {
           _this3._receiveSubscribeResponse(response);
@@ -23092,24 +23079,23 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
           if (dialog.error) {
             // OK response without Contact 
-            debug(dialog.error);
+            debugerror(dialog.error);
 
-            this._dialogTerminated(C.SUBSCRIBE_NON_OK_RESPONSE);
+            this._dialogTerminated(C.SUBSCRIBE_BAD_OK_RESPONSE);
 
             return;
           }
 
-          this._dialog = dialog; // After the event dialog created.
-
-          debug('emit "initialSubscribeOK"');
-          this.emit('initialSubscribeOK');
+          this._dialog = dialog;
+          debug('emit "dialogCreated"');
+          this.emit('dialogCreated');
         } // Check expires value.
 
 
         var expires_value = response.getHeader('expires');
 
         if (expires_value !== 0 && !expires_value) {
-          debugerror('response without Expires header'); // RFC 6665 3.1.1 SUBSCRIBE OK must contain Expires header.
+          debugerror('response without Expires header'); // RFC 6665 3.1.1 subscribe OK response must contain Expires header.
           // Use workaround expires value.
 
           expires_value = '900';
@@ -23174,20 +23160,18 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       var retryAfter = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : undefined;
 
       // To prevent duplicate emit terminated event.
-      if (this._is_terminated) {
+      if (!this._dialog) {
         return;
       }
 
-      this._is_terminated = true;
       this._state = C.STATE_TERMINATED; // Clear timers.
 
       clearTimeout(this._expires_timer);
       clearTimeout(this._unsubscribe_timeout_timer);
 
-      if (this._dialog) {
-        this._dialog.terminate();
-      }
+      this._dialog.terminate();
 
+      this._dialog = null;
       debug("emit \"terminated\" code=".concat(terminationCode));
       this.emit('terminated', terminationCode, reason, retryAfter);
     }
