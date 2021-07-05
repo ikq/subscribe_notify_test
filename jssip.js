@@ -23160,7 +23160,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       var retryAfter = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : undefined;
 
       // To prevent duplicate emit terminated event.
-      if (!this._dialog) {
+      if (this._state === C.STATE_TERMINATED) {
         return;
       }
 
@@ -23169,9 +23169,12 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       clearTimeout(this._expires_timer);
       clearTimeout(this._unsubscribe_timeout_timer);
 
-      this._dialog.terminate();
+      if (this._dialog) {
+        this._dialog.terminate();
 
-      this._dialog = null;
+        this._dialog = null;
+      }
+
       debug("emit \"terminated\" code=".concat(terminationCode));
       this.emit('terminated', terminationCode, reason, retryAfter);
     }
