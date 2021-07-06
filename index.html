@@ -51,14 +51,23 @@
 
 
         <div id="subscribe_panel" class="panel">
-            <button id="subscribe_return_btn" title="returns to main panel">main panel</button>
+            <button id="subscribe_return_btn" title="returns to dialer">Dialer</button>
+            <fieldset>
+                <legend>settings</legend>
+                <form id="subscribe_test_setting_form" onsubmit="event.preventDefault()">
+                    to user:<input type="text" class="input" name="user" size="6">
+                    event:<input type="text" class="input" name="event_name" size="6" value="test"><br>
+                    accept:<input type="text" class="input" name="accept" size="12" value="text/json,text/plain">
+                    content-type:<input type="text" class="input" name="content_type" size="6" value="text/json"><br>
+                    expires:<input type="text" class="input" name="expires" size="4" class="mark_invalid" pattern="^\d+$" value="3600"><br>
+                </form>
+            </fieldset>
+    
             <fieldset>
                 <legend>subscribe</legend>
                 <form id="send_subscribe_form" onsubmit="event.preventDefault()">
-                    to user:<input type="text" class="input" name="user" size="6">
-                    event:<input type="text" class="input" name="event_name" size="6" value="test">
-                    expires:<input type="text" class="input" name="expires" size="4" class="mark_invalid" pattern="^\d+$" value="3600"><br>
                     <button id="send_init_subscribe_btn" title="Send initial SUBSCRIBE">subscribe</button><br>
+                    <button id="send_initial_and_next_subscribe_btn" title="Send initial & next subscribe">subscribe & next</button>
                     <button id="send_next_subscribe_btn" title="Send next SUBSCRIBE">next subscribe</button><br>
                     <button id="send_unsubscribe_btn" title="Send un-SUBSCRIBE">un-subscribe</button>
                 </form>
