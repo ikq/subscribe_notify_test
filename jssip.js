@@ -22663,6 +22663,12 @@ exports.isSocket = function (socket) {
 
 function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "function" && typeof Symbol.iterator === "symbol") { _typeof = function _typeof(obj) { return typeof obj; }; } else { _typeof = function _typeof(obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }; } return _typeof(obj); }
 
+function _createForOfIteratorHelper(o, allowArrayLike) { var it = typeof Symbol !== "undefined" && o[Symbol.iterator] || o["@@iterator"]; if (!it) { if (Array.isArray(o) || (it = _unsupportedIterableToArray(o)) || allowArrayLike && o && typeof o.length === "number") { if (it) o = it; var i = 0; var F = function F() {}; return { s: F, n: function n() { if (i >= o.length) return { done: true }; return { done: false, value: o[i++] }; }, e: function e(_e) { throw _e; }, f: F }; } throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); } var normalCompletion = true, didErr = false, err; return { s: function s() { it = it.call(o); }, n: function n() { var step = it.next(); normalCompletion = step.done; return step; }, e: function e(_e2) { didErr = true; err = _e2; }, f: function f() { try { if (!normalCompletion && it["return"] != null) it["return"](); } finally { if (didErr) throw err; } } }; }
+
+function _unsupportedIterableToArray(o, minLen) { if (!o) return; if (typeof o === "string") return _arrayLikeToArray(o, minLen); var n = Object.prototype.toString.call(o).slice(8, -1); if (n === "Object" && o.constructor) n = o.constructor.name; if (n === "Map" || n === "Set") return Array.from(o); if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen); }
+
+function _arrayLikeToArray(arr, len) { if (len == null || len > arr.length) len = arr.length; for (var i = 0, arr2 = new Array(len); i < len; i++) { arr2[i] = arr[i]; } return arr2; }
+
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 function _defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } }
@@ -22838,8 +22844,10 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
     if (allowEvents) {
       _this._headers.push("Allow-Events: ".concat(allowEvents));
-    }
+    } // To enqueue subscribes created before receive initial subscribe OK.
 
+
+    _this._queue = [];
     return _this;
   }
 
@@ -22974,8 +22982,6 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       debug('subscribe()');
 
       if (this._state === C.STATE_INIT) {
-        this._state = C.STATE_NOTIFY_WAIT;
-
         this._sendInitialSubscribe(body, this._headers);
       } else {
         this._sendSubsequentSubscribe(body, this._headers);
@@ -23006,7 +23012,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
         return s.startsWith('Expires') ? 'Expires: 0' : s;
       });
 
-      if (!this._dialog) {
+      if (this._state === C.STATE_INIT) {
         // fetch-subscribe - initial subscribe with Expires: 0.
         this._sendInitialSubscribe(body, headers);
       } else {
@@ -23055,6 +23061,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
         headers.push("Content-Type: ".concat(this._content_type));
       }
 
+      this._state = C.STATE_NOTIFY_WAIT;
       var request = new SIPMessage.OutgoingRequest(JsSIP_C.SUBSCRIBE, this._ua.normalizeTarget(this._target), this._ua, this._params, headers, body);
       var request_sender = new RequestSender(this._ua, request, {
         onRequestTimeout: function onRequestTimeout() {
@@ -23088,7 +23095,23 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
           this._dialog = dialog;
           debug('emit "dialogCreated"');
-          this.emit('dialogCreated');
+          this.emit('dialogCreated'); // Subsequent subscribes saved in the queue until dialog created.
+
+          var _iterator = _createForOfIteratorHelper(this._queue),
+              _step;
+
+          try {
+            for (_iterator.s(); !(_step = _iterator.n()).done;) {
+              var subscribe = _step.value;
+              debug('dequeue subscribe');
+
+              this._sendSubsequentSubscribe(subscribe.body, subscribe.headers);
+            }
+          } catch (err) {
+            _iterator.e(err);
+          } finally {
+            _iterator.f();
+          }
         } // Check expires value.
 
 
@@ -23117,9 +23140,19 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     value: function _sendSubsequentSubscribe(body, headers) {
       var _this4 = this;
 
+      if (this._state === C.STATE_TERMINATED) {
+        return;
+      }
+
       if (!this._dialog) {
-        debugerror('sending subsequent subscribe before OK response to initial subscribe');
-        throw new Error('not received final response to initial SUBSCRIBE');
+        debug('enqueue subscribe');
+
+        this._queue.push({
+          body: body,
+          headers: headers.slice()
+        });
+
+        return;
       }
 
       if (body) {
