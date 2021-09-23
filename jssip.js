@@ -16755,7 +16755,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     });
 
     if (!_this._contact) {
-      _this._contact = "Contact: <sip:".concat(subscribe.to.uri.user, "@").concat(Utils.createRandomToken(12), ".invalid;transport=ws>");
+      _this._contact = "Contact: ".concat(_this._ua._contact.toString());
 
       _this._headers.push(_this._contact);
     }
@@ -23198,8 +23198,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     if (!_this._headers.find(function (header) {
       return header.startsWith('Contact');
     })) {
-      var contact = "Contact: <sip:".concat(_this._params.from_uri.user, "@").concat(Utils.createRandomToken(12), ".invalid;transport=ws>");
-      contact += ";+sip.instance=\"<urn:uuid:".concat(_this._ua.configuration.instance_id, ">\"");
+      var contact = "Contact: ".concat(_this._ua._contact.toString());
 
       _this._headers.push(contact);
     }
