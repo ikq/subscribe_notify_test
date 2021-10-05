@@ -16726,6 +16726,10 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       throw new TypeError('subscribe is undefined');
     }
 
+    if (!subscribe.hasHeader('contact')) {
+      throw new TypeError('subscribe - no contact header');
+    }
+
     if (!contentType) {
       throw new TypeError('contentType is undefined');
     }
@@ -16768,12 +16772,6 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     subscribe.to_tag = Utils.newTag(); // Create dialog for normal and fetch-subscribe.
 
     var dialog = new Dialog(_assertThisInitialized(_this), subscribe, 'UAS');
-
-    if (dialog.error) {
-      logger.warn(dialog.error);
-      throw new Error('SUBSCRIBE missed Contact');
-    }
-
     _this._dialog = dialog;
 
     if (_this._expires > 0) {
@@ -16803,15 +16801,14 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
         return;
       }
 
-      var expiresValue = request.getHeader('expires');
-
-      if (expiresValue === undefined || expiresValue === null) {
-        // Missed header Expires. RFC 6665 3.1.1. Set default expires value.  
-        expiresValue = '900';
-        logger.debug("Missed expires header. Set by default ".concat(expiresValue));
+      if (request.hasHeader('expires')) {
+        this._expires = parseInt(request.getHeader('expires'));
+      } else {
+        // RFC 6665 3.1.1, default expires value.
+        this._expires = 900;
+        logger.debug("missing Expires header field, default value set: ".concat(this._expires));
       }
 
-      this._expires = parseInt(expiresValue);
       request.reply(200, null, ["Expires: ".concat(this._expires), "".concat(this._contact)]);
       var body = request.body;
       var content_type = request.getHeader('content-type');
@@ -23369,8 +23366,8 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
       this._send_unsubscribe = true; // Set header Expires: 0.
 
-      var headers = this._headers.map(function (s) {
-        return s.startsWith('Expires') ? 'Expires: 0' : s;
+      var headers = this._headers.map(function (header) {
+        return header.startsWith('Expires') ? 'Expires: 0' : header;
       });
 
       if (this._state === C.STATE_INIT) {
@@ -23455,8 +23452,8 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
           }
 
           this._dialog = dialog;
-          logger.debug('emit "dialogCreated"');
-          this.emit('dialogCreated'); // Subsequent subscribes saved in the queue until dialog created.
+          logger.debug('emit "accepted"');
+          this.emit('accepted'); // Subsequent subscribes saved in the queue until dialog created.
 
           var _iterator = _createForOfIteratorHelper(this._queue),
               _step;
@@ -23577,6 +23574,17 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     value: function _scheduleSubscribe(expires) {
       var _this5 = this;
 
+      /*
+        If the expires time is less than 140 seconds we do not support Chrome intensive timer throttling mode. 
+        In this case, the re-subcribe is sent 5 seconds before the subscription expiration.
+         When Chrome is intensive timer throttling mode, in the worst case, 
+      the timer will be 60 seconds late.
+        We give the server 10 seconds to make sure it will execute the command even if it is heavily loaded. 
+        As a result, we order the time no later than 70 seconds before the subscription expiration.
+        Resulting time calculated as half time interval + (half interval - 70) * random.
+         E.g. expires is 140, re-subscribe will be ordered to send in 70 seconds.
+          expires is 600, re-subscribe will be ordered to send in 300 + (0 .. 230) seconds.
+      */
       var timeout = expires >= 140 ? expires * 1000 / 2 + Math.floor((expires / 2 - 70) * 1000 * Math.random()) : expires * 1000 - 5000;
       this._expires_timestamp = new Date().getTime() + expires * 1000;
       logger.debug("next SUBSCRIBE will be sent in ".concat(Math.floor(timeout / 1000), " sec"));

@@ -316,15 +316,15 @@ function guiSendInitSubscribe() {
     });
 
     /**
-     * Subscribe dialog created (subscribe OK received)
+     * Subscribe dialog accepted (subscribe OK received)
      * Next after initial subscribe can be send only after the event
      * 
      * If you send sequence: initial subscribe and immediately next subscribe,
      * next subscribe should be enqueued and send after the event.
      * (See subscribe enqueue example in ACD phone prototype broadsoft_acd.js)
      */
-    subscriber.on('dialogCreated', () => {
-        console.log('subscriber>>: dialogCreated');
+    subscriber.on('accepted', () => {
+        console.log('subscriber>>: accepted');
     });
 
     if (expires > 0) {
