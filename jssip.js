@@ -17070,11 +17070,13 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
         this._dialog.terminate();
 
         this._dialog = null;
-      }
+      } // For SUBSCRIPTION_EXPIRED the 'terminated' event was fired in expiration timer
 
-      var send_final_notify = termination_code === C.SUBSCRIPTION_EXPIRED;
-      logger.debug("emit \"terminated\" code=".concat(termination_code, ", send final notify=").concat(send_final_notify));
-      this.emit('terminated', termination_code, send_final_notify);
+
+      if (termination_code !== C.SUBSCRIPTION_EXPIRED) {
+        logger.debug("emit \"terminated\" code=".concat(termination_code, ", send final notify=false"));
+        this.emit('terminated', termination_code, false);
+      }
     }
   }, {
     key: "_setExpiresTimer",
@@ -17088,7 +17090,9 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
           return;
         }
 
-        _this3.terminate(null, 'timeout');
+        logger.debug("emit \"terminated\" code=".concat(C.SUBSCRIPTION_EXPIRED, ", send final notify=true"));
+
+        _this3.emit('terminated', C.SUBSCRIPTION_EXPIRED, true);
       }, this._expires * 1000);
     }
   }, {

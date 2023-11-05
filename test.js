@@ -419,9 +419,12 @@ function createNotifier(subscribe) {
         guiWarning(`notifier: terminated (${terminationText})`);
 
         // sendFinalNotify=true will be set for subscription timeout.
-        // You have to send final NOTIFY in the case (with or without body)
+        // You have to send final NOTIFY in the case 
+        // - final notify can be with or without body.
+        // - reason must be "timeout".
         if (sendFinalNotify) {
-            notifier.terminate(JSON.stringify({ text: 'Terminated state. Current data' }));
+            const body = JSON.stringify({ text: 'Terminated state. Current data' });
+            notifier.terminate(body, "timeout");
         }
         notifier = null;
         guiSubscribeButtons();
