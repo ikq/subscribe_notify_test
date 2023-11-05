@@ -1,7 +1,7 @@
 /*
- * JsSIP v3.8.0
+ * JsSIP v3.10.1
  * the Javascript SIP library
- * Copyright: 2012-2021 
+ * Copyright: 2012-2023 
  * Homepage: https://jssip.net
  * License: MIT
  */
@@ -51,11 +51,14 @@ exports.settings = {
   // Registration parameters.
   register: true,
   register_expires: 600,
+  register_from_tag_trail: '',
   registrar_server: null,
   // Connection options.
   sockets: null,
   connection_recovery_max_interval: JsSIP_C.CONNECTION_RECOVERY_MAX_INTERVAL,
   connection_recovery_min_interval: JsSIP_C.CONNECTION_RECOVERY_MIN_INTERVAL,
+  // Global extra headers, to be added to every request and response
+  extra_headers: null,
 
   /*
    * Host address.
@@ -232,6 +235,13 @@ var checks = {
         }
       }
     },
+    register_from_tag_trail: function register_from_tag_trail(_register_from_tag_trail) {
+      if (typeof _register_from_tag_trail === 'function') {
+        return _register_from_tag_trail;
+      }
+
+      return String(_register_from_tag_trail);
+    },
     registrar_server: function registrar_server(_registrar_server) {
       if (!/^sip:/i.test(_registrar_server)) {
         _registrar_server = "".concat(JsSIP_C.SIP, ":").concat(_registrar_server);
@@ -251,6 +261,32 @@ var checks = {
       if (typeof _use_preloaded_route === 'boolean') {
         return _use_preloaded_route;
       }
+    },
+    extra_headers: function extra_headers(_extra_headers) {
+      var _extraHeaders = [];
+
+      if (Array.isArray(_extra_headers) && _extra_headers.length) {
+        var _iterator2 = _createForOfIteratorHelper(_extra_headers),
+            _step2;
+
+        try {
+          for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
+            var header = _step2.value;
+
+            if (typeof header === 'string') {
+              _extraHeaders.push(header);
+            }
+          }
+        } catch (err) {
+          _iterator2.e(err);
+        } finally {
+          _iterator2.f();
+        }
+      } else {
+        return;
+      }
+
+      return _extraHeaders;
     }
   }
 };
@@ -495,7 +531,8 @@ var logger = new Logger('Dialog');
 var C = {
   // Dialog states.
   STATUS_EARLY: 1,
-  STATUS_CONFIRMED: 2
+  STATUS_CONFIRMED: 2,
+  STATUS_TERMINATED: 3
 }; // RFC 3261 12.1.
 
 module.exports = /*#__PURE__*/function () {
@@ -593,6 +630,11 @@ module.exports = /*#__PURE__*/function () {
       return this._uas_pending_reply;
     }
   }, {
+    key: "isTerminated",
+    value: function isTerminated() {
+      return this._status === C.STATUS_TERMINATED;
+    }
+  }, {
     key: "update",
     value: function update(message, type) {
       this._state = C.STATUS_CONFIRMED;
@@ -609,6 +651,8 @@ module.exports = /*#__PURE__*/function () {
       logger.debug("dialog ".concat(this._id.toString(), " deleted"));
 
       this._ua.destroyDialog(this);
+
+      this._state = C.STATUS_TERMINATED;
     }
   }, {
     key: "sendRequest",
@@ -760,8 +804,6 @@ var JsSIP_C = require('../Constants');
 
 var Transactions = require('../Transactions');
 
-var RTCSession = require('../RTCSession');
-
 var RequestSender = require('../RequestSender'); // Default event handlers.
 
 
@@ -852,11 +894,10 @@ module.exports = /*#__PURE__*/function () {
         } else {
           this._request.cseq = this._dialog.local_seqnum += 1;
           this._reattemptTimer = setTimeout(function () {
-            // TODO: look at dialog state instead.
-            if (_this2._dialog.owner.status !== RTCSession.C.STATUS_TERMINATED) {
+            if (!_this2._dialog.isTerminated()) {
               _this2._reattempt = true;
 
-              _this2._request_sender.send();
+              _this2.send();
             }
           }, 1000);
         }
@@ -870,7 +911,7 @@ module.exports = /*#__PURE__*/function () {
 
   return DialogRequestSender;
 }();
-},{"../Constants":2,"../RTCSession":15,"../RequestSender":21,"../Transactions":26}],5:[function(require,module,exports){
+},{"../Constants":2,"../RequestSender":21,"../Transactions":26}],5:[function(require,module,exports){
 "use strict";
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
@@ -16237,6 +16278,8 @@ var RequestSender = require('./RequestSender');
 
 var Exceptions = require('./Exceptions');
 
+var URI = require('./URI');
+
 var logger = new Logger('Message');
 
 module.exports = /*#__PURE__*/function (_EventEmitter) {
@@ -16300,7 +16343,18 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
       var extraHeaders = Utils.cloneArray(options.extraHeaders);
       var eventHandlers = Utils.cloneObject(options.eventHandlers);
-      var contentType = options.contentType || 'text/plain'; // Set event handlers.
+      var contentType = options.contentType || 'text/plain';
+      var requestParams = {};
+
+      if (options.fromUserName) {
+        requestParams.from_uri = new URI('sip', options.fromUserName, this._ua.configuration.uri.host);
+        extraHeaders.push("P-Preferred-Identity: ".concat(this._ua.configuration.uri.toString()));
+      }
+
+      if (options.fromDisplayName) {
+        requestParams.from_display_name = options.fromDisplayName;
+      } // Set event handlers.
+
 
       for (var event in eventHandlers) {
         if (Object.prototype.hasOwnProperty.call(eventHandlers, event)) {
@@ -16309,7 +16363,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       }
 
       extraHeaders.push("Content-Type: ".concat(contentType));
-      this._request = new SIPMessage.OutgoingRequest(JsSIP_C.MESSAGE, target, this._ua, null, extraHeaders);
+      this._request = new SIPMessage.OutgoingRequest(JsSIP_C.MESSAGE, target, this._ua, requestParams, extraHeaders);
 
       if (body) {
         this._request.body = body;
@@ -16506,7 +16560,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
 
   return Message;
 }(EventEmitter);
-},{"./Constants":2,"./Exceptions":6,"./Logger":9,"./RequestSender":21,"./SIPMessage":22,"./Utils":30,"events":33}],11:[function(require,module,exports){
+},{"./Constants":2,"./Exceptions":6,"./Logger":9,"./RequestSender":21,"./SIPMessage":22,"./URI":29,"./Utils":30,"events":33}],11:[function(require,module,exports){
 "use strict";
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
@@ -16643,6 +16697,12 @@ module.exports = /*#__PURE__*/function () {
 
 function _typeof(obj) { "@babel/helpers - typeof"; if (typeof Symbol === "function" && typeof Symbol.iterator === "symbol") { _typeof = function _typeof(obj) { return typeof obj; }; } else { _typeof = function _typeof(obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }; } return _typeof(obj); }
 
+function _createForOfIteratorHelper(o, allowArrayLike) { var it = typeof Symbol !== "undefined" && o[Symbol.iterator] || o["@@iterator"]; if (!it) { if (Array.isArray(o) || (it = _unsupportedIterableToArray(o)) || allowArrayLike && o && typeof o.length === "number") { if (it) o = it; var i = 0; var F = function F() {}; return { s: F, n: function n() { if (i >= o.length) return { done: true }; return { done: false, value: o[i++] }; }, e: function e(_e) { throw _e; }, f: F }; } throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); } var normalCompletion = true, didErr = false, err; return { s: function s() { it = it.call(o); }, n: function n() { var step = it.next(); normalCompletion = step.done; return step; }, e: function e(_e2) { didErr = true; err = _e2; }, f: function f() { try { if (!normalCompletion && it["return"] != null) it["return"](); } finally { if (didErr) throw err; } } }; }
+
+function _unsupportedIterableToArray(o, minLen) { if (!o) return; if (typeof o === "string") return _arrayLikeToArray(o, minLen); var n = Object.prototype.toString.call(o).slice(8, -1); if (n === "Object" && o.constructor) n = o.constructor.name; if (n === "Map" || n === "Set") return Array.from(o); if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen); }
+
+function _arrayLikeToArray(arr, len) { if (len == null || len > arr.length) len = arr.length; for (var i = 0, arr2 = new Array(len); i < len; i++) { arr2[i] = arr[i]; } return arr2; }
+
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 function _defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } }
@@ -16675,7 +16735,7 @@ var Dialog = require('./Dialog');
 
 var logger = new Logger('Notifier');
 /**
- * Termination codes. 
+ * Termination codes.
  */
 
 var C = {
@@ -16708,7 +16768,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
    * @param {NotifierOptions} options - Optional parameters.
    *   @param {Array<string>}  extraHeaders - Additional SIP headers.
    *   @param {string} allowEvents - Allow-Events header value.
-   *   @param {boolean} pending - Set initial dialog state as "pending". 
+   *   @param {boolean} pending - Set initial dialog state as "pending".
    */
   function Notifier(ua, subscribe, contentType, _ref) {
     var _this;
@@ -16739,10 +16799,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     _this._expires_timestamp = null;
     _this._expires_timer = null; // Notifier state: pending, active, terminated. Not used: init, resp_wait.
 
-    _this._state = pending ? C.STATE_PENDING : C.STATE_ACTIVE; // Optional. Used to build terminated Subscription-State.
-
-    _this._terminated_reason = null;
-    _this._terminated_retry_after = null; // Custom session empty object for high level use.
+    _this._state = pending ? C.STATE_PENDING : C.STATE_ACTIVE; // Custom session empty object for high level use.
 
     _this.data = {};
     _this._dialog = null;
@@ -16783,7 +16840,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
   }
   /**
    * Dialog callback.
-   * Called also for initial subscribe. 
+   * Called also for initial subscribe.
    * Supported RFC 6665 4.4.3: initial fetch subscribe (with expires: 0).
    */
 
@@ -16860,39 +16917,65 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
   }, {
     key: "notify",
     value: function notify() {
+      var body = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : null;
+      logger.debug('notify()');
+
+      if (this._state === C.STATE_TERMINATED) {
+        throw new Error('Cannot send notify in terminated state.');
+      }
+
+      var expires = Math.floor((this._expires_timestamp - new Date().getTime()) / 1000);
+
+      if (expires < 0) {
+        expires = 0;
+      }
+
+      this._notify([";expires=".concat(expires)], body);
+    }
+    /**
+     * @param {Array<string>} subsStateParams subscription state parameters.
+     * @param {String} body Notify body
+     * @param {Array<string>} extraHeaders
+     */
+
+  }, {
+    key: "_notify",
+    value: function _notify(subsStateParameters) {
       var _this2 = this;
 
-      var body = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : null;
-      logger.debug('notify()'); // Prevent send notify after final notify.
+      var body = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : null;
+      var extraHeaders = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : null;
 
+      // Prevent send notify after final notify.
       if (!this._dialog) {
         logger.warn('final notify has sent');
         return;
-      }
+      } // Build Subscription-State header with parameters.
 
-      var subs_state = this._stateNumberToString(this._state);
 
-      if (this._state !== C.STATE_TERMINATED) {
-        var expires = Math.floor((this._expires_timestamp - new Date().getTime()) / 1000);
+      var subsState = "Subscription-State: ".concat(this._stateToString());
 
-        if (expires < 0) {
-          expires = 0;
+      var _iterator = _createForOfIteratorHelper(subsStateParameters),
+          _step;
+
+      try {
+        for (_iterator.s(); !(_step = _iterator.n()).done;) {
+          var param = _step.value;
+          subsState += param;
         }
-
-        subs_state += ";expires=".concat(expires);
-      } else {
-        if (this._terminated_reason) {
-          subs_state += ";reason=".concat(this._terminated_reason);
-        }
-
-        if (this._terminated_retry_after !== null) {
-          subs_state += ";retry-after=".concat(this._terminated_retry_after);
-        }
+      } catch (err) {
+        _iterator.e(err);
+      } finally {
+        _iterator.f();
       }
 
       var headers = this._headers.slice();
 
-      headers.push("Subscription-State: ".concat(subs_state));
+      headers.push(subsState);
+
+      if (extraHeaders) {
+        headers = headers.concat(extraHeaders);
+      }
 
       if (body) {
         headers.push("Content-Type: ".concat(this._content_type));
@@ -16923,7 +17006,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     }
     /**
      *  Terminate. (Send the final NOTIFY request).
-     * 
+     *
      * @param {string} body - Notify message body.
      * @param {string} reason - Set Subscription-State reason parameter.
      * @param {number} retryAfter - Set Subscription-State retry-after parameter.
@@ -16937,14 +17020,22 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       var retryAfter = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : null;
       logger.debug('terminate()');
       this._state = C.STATE_TERMINATED;
-      this._terminated_reason = reason;
-      this._terminated_retry_after = retryAfter;
-      this.notify(body);
+      var subsStateParameters = [];
 
-      this._dialogTerminated(C.SEND_FINAL_NOTIFY);
+      if (reason) {
+        subsStateParameters.push(";reason=".concat(reason));
+      }
+
+      if (retryAfter !== null) {
+        subsStateParameters.push(";retry-after=".concat(retryAfter));
+      }
+
+      this._notify(subsStateParameters, body);
+
+      this._dialogTerminated(reason === 'timeout' ? C.SUBSCRIPTION_EXPIRED : C.SEND_FINAL_NOTIFY);
     }
     /**
-     * Get dialog state. 
+     * Get dialog state.
      */
 
   }, {
@@ -16997,17 +17088,13 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
           return;
         }
 
-        _this3._terminated_reason = 'timeout';
-
-        _this3.notify();
-
-        _this3._dialogTerminated(C.SUBSCRIPTION_EXPIRED);
+        _this3.terminate(null, 'timeout');
       }, this._expires * 1000);
     }
   }, {
-    key: "_stateNumberToString",
-    value: function _stateNumberToString(state) {
-      switch (state) {
+    key: "_stateToString",
+    value: function _stateToString() {
+      switch (this._state) {
         case C.STATE_PENDING:
           return 'pending';
 
@@ -17798,7 +17885,9 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     _this._localMediaStream = null;
     _this._localMediaStreamLocallyGenerated = false; // Flag to indicate PeerConnection ready for new actions.
 
-    _this._rtcReady = true; // SIP Timers.
+    _this._rtcReady = true; // Flag to indicate ICE candidate gathering is finished even if iceGatheringState is not yet 'complete'.
+
+    _this._iceReady = false; // SIP Timers.
 
     _this._timers = {
       ackTimer: null,
@@ -19416,7 +19505,15 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
         });
       }).then(function () {
         // Resolve right away if 'pc.iceGatheringState' is 'complete'.
-        if (connection.iceGatheringState === 'complete' && (!constraints || !constraints.iceRestart)) {
+
+        /**
+         * Resolve right away if:
+         * - 'connection.iceGatheringState' is 'complete' and no 'iceRestart' constraint is set.
+         * - 'connection.iceGatheringState' is 'gathering' and 'iceReady' is true.
+         */
+        var iceRestart = constraints && constraints.iceRestart;
+
+        if (connection.iceGatheringState === 'complete' && !iceRestart || connection.iceGatheringState === 'gathering' && _this13._iceReady) {
           _this13._rtcReady = true;
           var e = {
             originator: 'local',
@@ -19435,12 +19532,19 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
           var finished = false;
           var iceCandidateListener;
           var iceGatheringStateListener;
+          _this13._iceReady = false;
 
           var ready = function ready() {
+            if (finished) {
+              return;
+            }
+
             connection.removeEventListener('icecandidate', iceCandidateListener);
             connection.removeEventListener('icegatheringstatechange', iceGatheringStateListener);
             finished = true;
-            _this13._rtcReady = true;
+            _this13._rtcReady = true; // connection.iceGatheringState will still indicate 'gathering' and thus be blocking.
+
+            _this13._iceReady = true;
             var e = {
               originator: 'local',
               type: type,
@@ -19461,12 +19565,12 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
                 candidate: candidate,
                 ready: ready
               });
-            } else if (!finished) {
+            } else {
               ready();
             }
           });
           connection.addEventListener('icegatheringstatechange', iceGatheringStateListener = function iceGatheringStateListener() {
-            if (connection.iceGatheringState === 'complete' && !finished) {
+            if (connection.iceGatheringState === 'complete') {
               ready();
             }
           });
@@ -20732,6 +20836,10 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
             return;
           }
 
+          if (!_this27._isReadyToReOffer()) {
+            return;
+          }
+
           logger.debug('runSessionTimer() | sending session refresh request');
 
           if (_this27._sessionTimers.refreshMethod === JsSIP_C.UPDATE) {
@@ -21486,7 +21594,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
         return;
       }
 
-      var status_line = Grammar.parse(request.body.trim(), 'Status_Line');
+      var status_line = Grammar.parse(request.body.trim().split('\r\n', 1)[0], 'Status_Line');
 
       if (status_line === -1) {
         logger.debug("receiveNotify() | error parsing NOTIFY body: \"".concat(request.body, "\""));
@@ -21650,10 +21758,21 @@ module.exports = /*#__PURE__*/function () {
 
       extraHeaders.push("Contact: ".concat(this._contact, ";expires=").concat(this._expires).concat(this._extraContactParams));
       extraHeaders.push("Expires: ".concat(this._expires));
+      var fromTag = Utils.newTag();
+
+      if (this._ua.configuration.register_from_tag_trail) {
+        if (typeof this._ua.configuration.register_from_tag_trail === 'function') {
+          fromTag += this._ua.configuration.register_from_tag_trail();
+        } else {
+          fromTag += this._ua.configuration.register_from_tag_trail;
+        }
+      }
+
       var request = new SIPMessage.OutgoingRequest(JsSIP_C.REGISTER, this._registrar, this._ua, {
         'to_uri': this._to_uri,
         'call_id': this._call_id,
-        'cseq': this._cseq += 1
+        'cseq': this._cseq += 1,
+        'from_tag': fromTag
       }, extraHeaders);
       var request_sender = new RequestSender(this._ua, request, {
         onRequestTimeout: function onRequestTimeout() {
@@ -22159,8 +22278,13 @@ var OutgoingRequest = /*#__PURE__*/function () {
     this.method = method;
     this.ruri = ruri;
     this.body = body;
-    this.extraHeaders = Utils.cloneArray(extraHeaders); // Fill the Common SIP Request Headers.
+    this.extraHeaders = Utils.cloneArray(extraHeaders);
+
+    if (this.ua.configuration.extra_headers) {
+      this.extraHeaders = this.extraHeaders.concat(this.ua.configuration.extra_headers);
+    } // Fill the Common SIP Request Headers.
     // Route.
+
 
     if (params.route_set) {
       this.setHeader('route', params.route_set);
@@ -22752,6 +22876,11 @@ var IncomingRequest = /*#__PURE__*/function (_IncomingMessage) {
 
       reason = reason || JsSIP_C.REASON_PHRASE[code] || '';
       extraHeaders = Utils.cloneArray(extraHeaders);
+
+      if (this.ua.configuration.extra_headers) {
+        extraHeaders = extraHeaders.concat(this.ua.configuration.extra_headers);
+      }
+
       var response = "SIP/2.0 ".concat(code, " ").concat(reason, "\r\n");
 
       if (this.method === JsSIP_C.INVITE && code > 100 && code <= 200) {
@@ -22911,6 +23040,23 @@ var IncomingRequest = /*#__PURE__*/function (_IncomingMessage) {
       response += "From: ".concat(this.getHeader('From'), "\r\n");
       response += "Call-ID: ".concat(this.call_id, "\r\n");
       response += "CSeq: ".concat(this.cseq, " ").concat(this.method, "\r\n");
+
+      if (this.ua.configuration.extra_headers) {
+        var _iterator12 = _createForOfIteratorHelper(this.ua.configuration.extra_headers),
+            _step12;
+
+        try {
+          for (_iterator12.s(); !(_step12 = _iterator12.n()).done;) {
+            var header = _step12.value;
+            response += "".concat(header.trim(), "\r\n");
+          }
+        } catch (err) {
+          _iterator12.e(err);
+        } finally {
+          _iterator12.f();
+        }
+      }
+
       response += "Content-Length: ".concat(0, "\r\n\r\n");
       this.transport.send(response);
     }
@@ -23102,12 +23248,12 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
    * @param {string} target
    * @param {string} eventName - Event header value. May end with optional ;id=xxx
    * @param {string} accept - Accept header value.
-   * 
+   *
    * @param {SubscriberOption} options - optional parameters.
    *   @param {number} expires - Expires header value. Default is 900.
    *   @param {string} contentType - Content-Type header value. Used for SUBSCRIBE with body
    *   @param {string} allowEvents - Allow-Events header value.
-   *   @param {RequestParams} params - Will have priority over ua.configuration. 
+   *   @param {RequestParams} params - Will have priority over ua.configuration.
    *      If set please define: to_uri, to_display_name, from_uri, from_display_name
    *   @param {Array<string>} extraHeaders - Additional SIP headers.
    */
@@ -23168,11 +23314,11 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
     _this._dialog = null; // To refresh subscription.
 
     _this._expires_timer = null;
-    _this._expires_timestamp = null; // To prevent duplicate un-subscribe sending.
+    _this._expires_timestamp = null; // To prevent duplicate terminated call.
 
-    _this._send_unsubscribe = false; // After send un-subscribe wait final notify limited time.
+    _this._terminated = false; // After send un-subscribe wait final notify limited time.
 
-    _this._unsubscribe_timeout_timer = null; // Custom session empty object for high level use.    
+    _this._unsubscribe_timeout_timer = null; // Custom session empty object for high level use.
 
     _this.data = {};
     var parsed = Grammar.parse(eventName, 'Event');
@@ -23328,7 +23474,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
      * User API
      */
 
-    /** 
+    /**
      * Send the initial (non-fetch)  and subsequent subscribe.
      * @param {string} body - subscribe request body.
      */
@@ -23345,8 +23491,8 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
         this._sendSubsequentSubscribe(body, this._headers);
       }
     }
-    /** 
-     * terminate. 
+    /**
+     * terminate.
      * Send un-subscribe or fetch-subscribe (with Expires: 0).
      * @param {string} body - un-subscribe request body
      */
@@ -23359,12 +23505,11 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       var body = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : null;
       logger.debug('terminate()'); // Prevent duplication un-subscribe sending.
 
-      if (this._send_unsubscribe) {
-        logger.warn('unsubscribe has already been sent');
+      if (this._terminated) {
         return;
       }
 
-      this._send_unsubscribe = true; // Set header Expires: 0.
+      this._terminated = true; // Set header Expires: 0.
 
       var headers = this._headers.map(function (header) {
         return header.startsWith('Expires') ? 'Expires: 0' : header;
@@ -23443,7 +23588,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
           var dialog = new Dialog(this, response, 'UAC');
 
           if (dialog.error) {
-            // OK response without Contact 
+            // OK response without Contact
             logger.warn(dialog.error);
 
             this._dialogTerminated(C.SUBSCRIBE_BAD_OK_RESPONSE);
@@ -23575,11 +23720,11 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       var _this5 = this;
 
       /*
-        If the expires time is less than 140 seconds we do not support Chrome intensive timer throttling mode. 
+        If the expires time is less than 140 seconds we do not support Chrome intensive timer throttling mode.
         In this case, the re-subcribe is sent 5 seconds before the subscription expiration.
-         When Chrome is intensive timer throttling mode, in the worst case, 
+         When Chrome is in intensive timer throttling mode, in the worst case,
       the timer will be 60 seconds late.
-        We give the server 10 seconds to make sure it will execute the command even if it is heavily loaded. 
+        We give the server 10 seconds to make sure it will execute the command even if it is heavily loaded.
         As a result, we order the time no later than 70 seconds before the subscription expiration.
         Resulting time calculated as half time interval + (half interval - 70) * random.
          E.g. expires is 140, re-subscribe will be ordered to send in 70 seconds.
@@ -24781,7 +24926,21 @@ module.exports = /*#__PURE__*/function () {
   }, {
     key: "_onData",
     value: function _onData(data) {
-      // CRLF Keep Alive response from server. Ignore it.
+      // CRLF Keep Alive request from server, reply.
+      if (data === '\r\n\r\n') {
+        logger.debug('received message with double-CRLF Keep Alive request');
+
+        try {
+          // Reply with single CRLF.
+          this.socket.send('\r\n');
+        } catch (error) {
+          logger.warn("error sending Keep Alive response: ".concat(error));
+        }
+
+        return;
+      } // CRLF Keep Alive response from server, ignore it.
+
+
       if (data === '\r\n') {
         logger.debug('received message with CRLF Keep Alive response');
         return;
@@ -25093,7 +25252,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
       message.send(target, body, options);
       return message;
     }
-    /** 
+    /**
      * Create subscriber instance
      */
 
@@ -25282,6 +25441,12 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
         case 'display_name':
           {
             this._configuration.display_name = value;
+            break;
+          }
+
+        case 'extra_headers':
+          {
+            this._configuration.extra_headers = value;
             break;
           }
 
@@ -25745,7 +25910,7 @@ module.exports = /*#__PURE__*/function (_EventEmitter) {
         }
       }; // Seal the configuration.
 
-      var writable_parameters = ['authorization_user', 'password', 'realm', 'ha1', 'authorization_jwt', 'display_name', 'register'];
+      var writable_parameters = ['authorization_user', 'password', 'realm', 'ha1', 'authorization_jwt', 'display_name', 'register', 'extra_headers'];
 
       for (var parameter in this._configuration) {
         if (Object.prototype.hasOwnProperty.call(this._configuration, parameter)) {
@@ -26492,7 +26657,6 @@ exports.calculateMD5 = function (string) {
   }
 
   function utf8Encode(str) {
-    str = str.replace(/\r\n/g, '\n');
     var utftext = '';
 
     for (var n = 0; n < str.length; n++) {
@@ -29285,7 +29449,7 @@ module.exports={
   "name": "jssip",
   "title": "JsSIP",
   "description": "the Javascript SIP library",
-  "version": "3.8.0",
+  "version": "3.10.1",
   "homepage": "https://jssip.net",
   "contributors": [
     "José Luis Millán <jmillan@aliax.net> (https://github.com/jmillan)",
@@ -29310,15 +29474,15 @@ module.exports={
     "url": "https://github.com/versatica/JsSIP/issues"
   },
   "dependencies": {
-    "@types/debug": "^4.1.5",
-    "@types/node": "^14.14.34",
+    "@types/events": "^3.0.0",
+    "@types/debug": "^4.1.7",
     "debug": "^4.3.1",
     "events": "^3.3.0",
     "sdp-transform": "^2.14.1"
   },
   "devDependencies": {
-    "@babel/core": "^7.13.10",
-    "@babel/preset-env": "^7.13.10",
+    "@babel/core": "^7.19.6",
+    "@babel/preset-env": "^7.19.4",
     "ansi-colors": "^3.2.4",
     "browserify": "^16.5.1",
     "eslint": "^5.16.0",
@@ -29337,9 +29501,10 @@ module.exports={
     "vinyl-source-stream": "^2.0.0"
   },
   "scripts": {
-    "lint": "gulp lint",
-    "test": "gulp test",
-    "prepublishOnly": "gulp babel"
+    "lint": "node npm-scripts.js lint",
+    "test": "node npm-scripts.js test",
+    "prepublish": "node npm-scripts.js prepublish",
+    "release": "node npm-scripts.js release"
   }
 }
 
